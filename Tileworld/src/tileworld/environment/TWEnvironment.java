@@ -14,8 +14,8 @@ import sim.util.Int2D;
 import sun.font.TrueTypeFont;
 import tileworld.Parameters;
 import tileworld.TWGUI;
-import tileworld.agent.CustomTWAgent_v1;
 import tileworld.agent.Message;
+import tileworld.agent.SimpleTWAgent;
 import tileworld.agent.TWAgent;
 
 /**
@@ -111,7 +111,7 @@ public class TWEnvironment extends SimState implements Steppable {
         Int2D pos;
         for (int i = 1; i <= 6; i++) {
             pos = this.generateRandomLocation();
-            createAgent(new CustomTWAgent_v1("agent" + i, pos.getX(), pos.getY(), this, Parameters.defaultFuelLevel));
+            createAgent(createConfiguredAgent("agent" + i, pos.getX(), pos.getY(), Parameters.defaultFuelLevel));
         }
         
 //        
@@ -121,6 +121,17 @@ public class TWEnvironment extends SimState implements Steppable {
 
 
 
+    }
+
+    private TWAgent createConfiguredAgent(String name, int x, int y, double fuel) {
+        try {
+            Class<?> clazz = Class.forName("tileworld.agent.ArdaTWAgent_v1");
+            return (TWAgent) clazz
+                    .getConstructor(String.class, int.class, int.class, TWEnvironment.class, double.class)
+                    .newInstance(name, x, y, this, fuel);
+        } catch (ReflectiveOperationException e) {
+            return new SimpleTWAgent(name, x, y, this, fuel);
+        }
     }
 
     private void createTWObjects(double time) {

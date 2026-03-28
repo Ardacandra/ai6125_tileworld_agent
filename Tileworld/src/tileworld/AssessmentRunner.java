@@ -54,6 +54,7 @@ public class AssessmentRunner {
     }
 
     private static final class AgentAggregate {
+        String className = "";
         int runsObserved;
         int totalScore;
         double totalFinalFuel;
@@ -83,6 +84,7 @@ public class AssessmentRunner {
     private static final class RunSummary {
         int runReward;
         long stepsExecuted;
+        Map<String, String> classNameByAgent = new LinkedHashMap<String, String>();
         Map<String, Integer> scoreByAgent = new LinkedHashMap<String, Integer>();
         Map<String, Double> finalFuelByAgent = new LinkedHashMap<String, Double>();
         Map<String, Integer> refuelCountByAgent = new LinkedHashMap<String, Integer>();
@@ -136,6 +138,7 @@ public class AssessmentRunner {
                 AgentAggregate aggregate = perAgent.get(agentName);
                 if (aggregate == null) {
                     aggregate = new AgentAggregate();
+                    aggregate.className = summary.classNameByAgent.getOrDefault(agentName, "");
                     perAgent.put(agentName, aggregate);
                 }
                 aggregate.addRun(score, finalFuel, ranOut, refuels, maxTiles, fuelConsumed, idleSteps);
@@ -182,7 +185,7 @@ public class AssessmentRunner {
             double avgMaxTiles = agg.totalMaxTilesCarried / (double) agg.runsObserved;
             double avgFuelConsumed = agg.totalFuelConsumed / (double) agg.runsObserved;
             double idleRatio = 100.0 * agg.totalIdleSteps / (agg.runsObserved * (double) STEPS);
-            System.out.println(agent
+            System.out.println(agent + " (" + agg.className + ")"
                     + " | avgReward=" + String.format("%.2f", avgScore)
                     + " | avgFinalFuel=" + String.format("%.2f", avgFinalFuel)
                 + " | avgRefuels=" + String.format("%.2f", avgRefuels)
@@ -273,6 +276,7 @@ public class AssessmentRunner {
 
             for (TWAgent agent : agents) {
                 String name = agent.getName();
+                summary.classNameByAgent.put(name, agent.getClass().getSimpleName());
                 summary.scoreByAgent.put(name, agent.getScore());
                 summary.finalFuelByAgent.put(name, agent.getFuelLevel());
                 summary.refuelCountByAgent.put(name, refuelCounts.get(name));

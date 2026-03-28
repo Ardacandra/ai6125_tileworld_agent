@@ -18,7 +18,7 @@ import tileworld.planners.AstarPathGenerator;
 import tileworld.planners.TWPath;
 import tileworld.planners.TWPathStep;
 
-public class CustomTWAgent_v1 extends TWAgent {
+public class ArdaTWAgent_v1 extends TWAgent {
     private static final double FUEL_THRESHOLD_RATIO = 0.20;
     private static final String TYPE_TILE = "tile";
     private static final String TYPE_HOLE = "hole";
@@ -67,7 +67,7 @@ public class CustomTWAgent_v1 extends TWAgent {
         }
     }
 
-    public CustomTWAgent_v1(String name, int xpos, int ypos, TWEnvironment env, double fuelLevel) {
+    public ArdaTWAgent_v1(String name, int xpos, int ypos, TWEnvironment env, double fuelLevel) {
         super(xpos, ypos, env, fuelLevel);
         this.name = name;
         this.pathGenerator = new AstarPathGenerator(env, this, env.getxDimension() * env.getyDimension());
@@ -173,37 +173,41 @@ public class CustomTWAgent_v1 extends TWAgent {
         TWEntity seenTile = this.getMemory().getClosestObjectInSensorRange(TWTile.class);
         if (seenTile != null) {
             this.getEnvironment().receiveMessage(
-                    Message.info(this.getName(), TYPE_TILE, seenTile.getX(), seenTile.getY(), this.getX(), this.getY()));
+                    ArdaMessage.info(this.getName(), TYPE_TILE, seenTile.getX(), seenTile.getY(), this.getX(), this.getY()));
         }
 
         TWEntity seenHole = this.getMemory().getClosestObjectInSensorRange(TWHole.class);
         if (seenHole != null) {
             this.getEnvironment().receiveMessage(
-                    Message.info(this.getName(), TYPE_HOLE, seenHole.getX(), seenHole.getY(), this.getX(), this.getY()));
+                    ArdaMessage.info(this.getName(), TYPE_HOLE, seenHole.getX(), seenHole.getY(), this.getX(), this.getY()));
         }
 
         locateFuelStation();
         if (fuelX >= 0 && fuelY >= 0) {
             this.getEnvironment().receiveMessage(
-                    Message.info(this.getName(), TYPE_FUEL, fuelX, fuelY, this.getX(), this.getY()));
+                    ArdaMessage.info(this.getName(), TYPE_FUEL, fuelX, fuelY, this.getX(), this.getY()));
         }
 
         if (!"".equals(intendedType) && intendedX >= 0 && intendedY >= 0) {
             this.getEnvironment().receiveMessage(
-                    Message.intention(this.getName(), intendedType, intendedX, intendedY, this.getX(), this.getY()));
+                    ArdaMessage.intention(this.getName(), intendedType, intendedX, intendedY, this.getX(), this.getY()));
         }
     }
 
     private void ingestMessages() {
         receivedIntentions.clear();
-        for (Message message : this.getEnvironment().getMessages()) {
+        for (Message rawMessage : this.getEnvironment().getMessages()) {
+            if (!(rawMessage instanceof ArdaMessage)) {
+                continue;
+            }
+            ArdaMessage message = (ArdaMessage) rawMessage;
             if (this.getName().equals(message.getFrom())) {
                 continue;
             }
 
-            if (message.getType() == Message.MessageType.INFO) {
+            if (message.getType() == ArdaMessage.MessageType.INFO) {
                 updateKnowledge(message.getEntityType(), message.getX(), message.getY());
-            } else if (message.getType() == Message.MessageType.INTENTION) {
+            } else if (message.getType() == ArdaMessage.MessageType.INTENTION) {
                 receivedIntentions.add(new IntentInfo(
                         message.getFrom(),
                         message.getEntityType(),

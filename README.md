@@ -64,7 +64,7 @@ For a headless evaluation of Configuration 1 and Configuration 2, run `tileworld
 
 ## Results
 
-### CustomTWAgent_v1 
+### ArdaTWAgent_v1 
 
 #### Logic
 
@@ -83,5 +83,5 @@ For a headless evaluation of Configuration 1 and Configuration 2, run `tileworld
 
 #### Results
 
-- `CustomTWAgent_v1` Configuration 1 average reward: `267.90`
-- `CustomTWAgent_v1` Configuration 2 average reward: `1264.30`
+- `ArdaTWAgent_v1` Configuration 1 average reward: `267.90`
+- `ArdaTWAgent_v1` Configuration 2 average reward: `1264.30`

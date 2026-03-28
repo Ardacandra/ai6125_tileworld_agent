@@ -33,6 +33,13 @@ import tileworld.agent.TWAgent;
  */
 public class TWEnvironment extends SimState implements Steppable {
 
+    private static final String[] DEFAULT_AGENT_CLASSES = {
+            "tileworld.agent.ArdaTWAgent_v1",
+            "tileworld.agent.AmeyaGreedyBFSAgentWithMemory",
+            "tileworld.agent.EricaMyTWAgent",
+            "tileworld.agent.HarshdeepPerimeterAgent"
+    };
+
 
     //Parameters to configure the environment - read from main parameter file
     private final int xDimension = Parameters.xDimension; //size in cells
@@ -107,15 +114,11 @@ public class TWEnvironment extends SimState implements Steppable {
 
         schedule.scheduleRepeating(this, 1, 1.0);
         
-        // Create 6 agents with a fixed 3/3 composition.
+        // Create 4 agents with one instance of each agent type.
         Int2D pos;
-        for (int i = 1; i <= 3; i++) {
+        for (int i = 0; i < DEFAULT_AGENT_CLASSES.length; i++) {
             pos = this.generateRandomLocation();
-            createAgent(createAgentByClass("tileworld.agent.ArdaTWAgent_v1", "agent" + i, pos.getX(), pos.getY(), Parameters.defaultFuelLevel));
-        }
-        for (int i = 4; i <= 6; i++) {
-            pos = this.generateRandomLocation();
-            createAgent(createAgentByClass("tileworld.agent.AmeyaGreedyBFSAgentWithMemory", "agent" + i, pos.getX(), pos.getY(), Parameters.defaultFuelLevel));
+            createAgent(createAgentByClass(DEFAULT_AGENT_CLASSES[i], "agent" + (i + 1), pos.getX(), pos.getY(), Parameters.defaultFuelLevel));
         }
         
 //        
@@ -134,6 +137,7 @@ public class TWEnvironment extends SimState implements Steppable {
                     .getConstructor(String.class, int.class, int.class, TWEnvironment.class, double.class)
                     .newInstance(name, x, y, this, fuel);
         } catch (ReflectiveOperationException e) {
+            System.err.println("Falling back to SimpleTWAgent for " + className + ": " + e.getMessage());
             return new SimpleTWAgent(name, x, y, this, fuel);
         }
     }

@@ -95,8 +95,8 @@ public class AssessmentRunner {
     }
 
     public static void main(String[] args) {
-        Config config1 = new Config("Configuration 1", 50, 50, 0.2, 0.05, 100, 500, 5);
-        Config config2 = new Config("Configuration 2", 80, 80, 2.0, 0.5, 30, 500, 5);
+        Config config1 = new Config("Configuration 1", 50, 50, 0.2, 0.05, 100, 500, 6);
+        Config config2 = new Config("Configuration 2", 80, 80, 2.0, 0.5, 30, 500, 6);
 
         runConfiguration(config1);
         runConfiguration(config2);

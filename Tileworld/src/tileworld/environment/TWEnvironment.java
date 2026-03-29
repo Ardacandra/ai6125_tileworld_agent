@@ -38,7 +38,8 @@ public class TWEnvironment extends SimState implements Steppable {
             "tileworld.agent.AmeyaGreedyBFSAgentWithMemory",
             "tileworld.agent.EricaMyTWAgent",
             "tileworld.agent.HarshdeepPerimeterAgent",
-            "tileworld.agent.BalalaZonePatrolAgent"
+            "tileworld.agent.BalalaZonePatrolAgent",
+            "tileworld.agent.BenTWAgent"
     };
 
 

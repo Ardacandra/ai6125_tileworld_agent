@@ -13,7 +13,7 @@ import tileworld.planners.GreedyBFSPathGenerator;
 import tileworld.planners.TWPath;
 import tileworld.planners.TWPathStep;
 
-public class GreedyBFSAgentWithMemoryMessage extends TWAgent {
+public class AmeyaGreedyBFSAgentWithMemoryMessage extends TWAgent {
 
     private static final String ENTITY_TILE        = "tile";
     private static final String ENTITY_HOLE        = "hole";
@@ -38,7 +38,7 @@ public class GreedyBFSAgentWithMemoryMessage extends TWAgent {
     private int[] pendingInfoTile   = null; // saw tile but couldn't pick up
     private int[] pendingInfoHole   = null; // saw hole but couldn't fill
 
-    public GreedyBFSAgentWithMemoryMessage(String name, int xpos, int ypos,
+    public AmeyaGreedyBFSAgentWithMemoryMessage(String name, int xpos, int ypos,
                                             TWEnvironment env, double fuelLevel) {
         super(xpos, ypos, env, fuelLevel);
         this.name = name;

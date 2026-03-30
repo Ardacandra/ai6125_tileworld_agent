@@ -56,6 +56,7 @@ public class BalalaZonePatrolAgent extends TWAgent {
     private final String             name;
     private final AstarPathGenerator pathGenerator;
     private BalalaCustomTWAgentMemory customMemory;
+    private final Phase1Strategy     phase1;
 
     private int fuelStationX = -1;
     private int fuelStationY = -1;
@@ -85,6 +86,7 @@ public class BalalaZonePatrolAgent extends TWAgent {
         this.sweepCol       = 0;
         this.sweepRow       = 0;
         this.sweepGoingDown = true;
+        this.phase1         = new Phase1Strategy(this);
     }
 
     // ---------------------------------------------------------------
@@ -92,6 +94,9 @@ public class BalalaZonePatrolAgent extends TWAgent {
     // ---------------------------------------------------------------
     @Override
     public void communicate() {
+        phase1.communicate();
+        if (!phase1.isComplete()) return;
+
         String payload = "POS:" + getX() + "," + getY()
                        + ";TILES:" + carriedTiles.size();
         Message msg = new Message(name, "*", payload);
@@ -103,7 +108,20 @@ public class BalalaZonePatrolAgent extends TWAgent {
     // ---------------------------------------------------------------
     @Override
     protected TWThought think() {
+        if (!phase1.isComplete()) {
+            TWThought t = phase1.think();
+            if (t != null) return t;
+            // Phase 1 just completed; fall through to Phase 2
+        }
+        // Sync fuel station from Phase 1 result (once)
+        if (fuelStationX == -1 && phase1.getFuelStation() != null) {
+            fuelStationX = phase1.getFuelStation().x;
+            fuelStationY = phase1.getFuelStation().y;
+        }
+        return customThink();
+    }
 
+    private TWThought customThink() {
         locateFuelStation();
 
         int ax = getX();

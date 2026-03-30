@@ -16,6 +16,7 @@ import java.util.Map;
 public class EricaMyTWAgent extends TWAgent {
     private String name;
     private TWPath currentPath = null;
+    private Phase1Strategy phase1;
     
     // --- CONSISTENCY & STRATEGY PARAMETERS ---
     private static final double FUEL_THRESHOLD_RATIO       = 0.22; 
@@ -31,6 +32,13 @@ public class EricaMyTWAgent extends TWAgent {
     public EricaMyTWAgent(String name, int x, int y, TWEnvironment env, double fuel) {
         super(x, y, env, fuel);
         this.name = name;
+        this.phase1 = new Phase1Strategy(this);
+    }
+
+    @Override
+    public void communicate() {
+        phase1.communicate();
+        // No Phase 2 messaging needed
     }
 
     @Override public String getName() { return this.name; }
@@ -72,6 +80,20 @@ public class EricaMyTWAgent extends TWAgent {
 
     @Override
     protected TWThought think() {
+        if (!phase1.isComplete()) {
+            TWThought t = phase1.think();
+            if (t != null) return t;
+            // Phase 1 just completed; fall through to Phase 2
+        }
+        // Sync fuel station from Phase 1 result (once, static field)
+        if (fuelStationX == -1 && phase1.getFuelStation() != null) {
+            fuelStationX = phase1.getFuelStation().x;
+            fuelStationY = phase1.getFuelStation().y;
+        }
+        return customThink();
+    }
+
+    private TWThought customThink() {
         updatePerception();
 
         // 1. SMART REFUEL LOGIC

@@ -23,11 +23,12 @@ import tileworld.planners.BenTWPlanner;
 public class BenTWAgent extends TWAgent {
 	private String name;
 	private BenTWPlanner planner;
-	
+	private Phase1Strategy phase1;
+
 	private Int2D fuelStation;
 	private int stepCount;
 	private boolean fuelBroadcasted;
-	
+
     public BenTWAgent(String name, int xpos, int ypos, TWEnvironment env, double fuelLevel) {
         super(xpos,ypos,env,fuelLevel);
         this.name = name;
@@ -35,12 +36,32 @@ public class BenTWAgent extends TWAgent {
         this.fuelStation = null;
         this.stepCount = 0;
         this.fuelBroadcasted = false;
+        this.phase1 = new Phase1Strategy(this);
     }
 
     protected TWThought think() {
     	//Sense Phase - ensure state of world is updated
     	sense();
     	stepCount++;
+
+    	// Phase 1: coordinated fuel station discovery
+    	if (!phase1.isComplete()) {
+    		communicate(); // sends init (step 1) or fuel (once found)
+    		TWThought t = phase1.think();
+    		if (t != null) return t;
+    		// Phase 1 just completed; fall through to Phase 2
+    	}
+
+    	// Sync fuel station from Phase 1 result (once)
+    	if (fuelStation == null && phase1.getFuelStation() != null) {
+    		fuelStation = phase1.getFuelStation();
+    	}
+    	
+    	return customThink();
+    }
+    
+    private TWThought customThink() {
+    	// Phase 2: existing BenTWAgent logic
     	updateFuelStation();
     	communicate();
     	readMessage();
@@ -189,6 +210,8 @@ public class BenTWAgent extends TWAgent {
 	
 	@Override
 	public void communicate() {
+		phase1.communicate();
+
 		if (fuelStation != null && !fuelBroadcasted) {
 	        fuelBroadcasted = true;
 	        String msg = "FUEL:" + fuelStation.x + "," + fuelStation.y;

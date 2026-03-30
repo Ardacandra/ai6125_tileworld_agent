@@ -18,6 +18,7 @@ public class HarshdeepPerimeterAgent extends TWAgent {
 
     private final String             name;
     private final AstarPathGenerator astar;
+    private final Phase1Strategy     phase1;
 
     private int    fuelStationX = -1, fuelStationY = -1;
     private TWPath path         = null;
@@ -36,6 +37,13 @@ public class HarshdeepPerimeterAgent extends TWAgent {
         this.corners = new int[][]{
             {0, 0}, {maxX, 0}, {maxX, maxY}, {0, maxY}
         };
+        this.phase1 = new Phase1Strategy(this);
+    }
+
+    @Override
+    public void communicate() {
+        phase1.communicate();
+        // No Phase 2 messaging; commented-out zone sweep message omitted.
     }
 
     // @Override
@@ -59,6 +67,20 @@ public class HarshdeepPerimeterAgent extends TWAgent {
 
     @Override
     protected TWThought think() {
+        if (!phase1.isComplete()) {
+            TWThought t = phase1.think();
+            if (t != null) return t;
+            // Phase 1 just completed; fall through to Phase 2
+        }
+        // Sync fuel station from Phase 1 result (once)
+        if (fuelStationX == -1 && phase1.getFuelStation() != null) {
+            fuelStationX = phase1.getFuelStation().x;
+            fuelStationY = phase1.getFuelStation().y;
+        }
+        return customThink();
+    }
+
+    private TWThought customThink() {
         locateFuelStation();
 
         int ax = getX(), ay = getY();

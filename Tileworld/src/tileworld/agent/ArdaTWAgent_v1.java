@@ -26,6 +26,8 @@ public class ArdaTWAgent_v1 extends TWAgent {
 
     private final String name;
 
+    private Phase1Strategy phase1;
+
     private String intendedType = "";
     private int intendedX = -1;
     private int intendedY = -1;
@@ -71,10 +73,25 @@ public class ArdaTWAgent_v1 extends TWAgent {
         super(xpos, ypos, env, fuelLevel);
         this.name = name;
         this.pathGenerator = new AstarPathGenerator(env, this, env.getxDimension() * env.getyDimension());
+        this.phase1 = new Phase1Strategy(this);
     }
 
     @Override
     protected TWThought think() {
+        if (!phase1.isComplete()) {
+            TWThought t = phase1.think();
+            if (t != null) return t;
+            // Phase 1 just completed; fall through to Phase 2
+        }
+        // Sync fuel station from Phase 1 result (once)
+        if (fuelX < 0 && phase1.getFuelStation() != null) {
+            fuelX = phase1.getFuelStation().x;
+            fuelY = phase1.getFuelStation().y;
+        }
+        return customThink();
+    }
+
+    private TWThought customThink() {
         ingestMessages();
         refreshKnowledge();
 
@@ -170,6 +187,9 @@ public class ArdaTWAgent_v1 extends TWAgent {
 
     @Override
     public void communicate() {
+        phase1.communicate();
+        if (!phase1.isComplete()) return;
+
         TWEntity seenTile = this.getMemory().getClosestObjectInSensorRange(TWTile.class);
         if (seenTile != null) {
             this.getEnvironment().receiveMessage(

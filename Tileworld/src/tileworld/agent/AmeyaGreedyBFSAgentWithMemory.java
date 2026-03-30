@@ -28,6 +28,8 @@ public class AmeyaGreedyBFSAgentWithMemory extends TWAgent {
     private int fuelStationX = -1;
     private int fuelStationY = -1;
 
+    private Phase1Strategy phase1;
+
     public AmeyaGreedyBFSAgentWithMemory(String name, int xpos, int ypos,
                                  TWEnvironment env, double fuelLevel) {
         super(xpos, ypos, env, fuelLevel);
@@ -39,16 +41,31 @@ public class AmeyaGreedyBFSAgentWithMemory extends TWAgent {
         this.memory = customMemory;
 
         this.pathGenerator = new AmeyaGreedyBFSPathGenerator(env, this, env.getxDimension() * env.getyDimension());
+        this.phase1 = new Phase1Strategy(this);
     }
 
     @Override
     public void communicate() {
-        // No message passing yet; left empty intentionally.
+        phase1.communicate();
+        // No Phase 2 message passing yet; left empty intentionally.
     }
 
     @Override
     protected TWThought think() {
+        if (!phase1.isComplete()) {
+            TWThought t = phase1.think();
+            if (t != null) return t;
+            // Phase 1 just completed; fall through to Phase 2
+        }
+        // Sync fuel station from Phase 1 result (once)
+        if (fuelStationX == -1 && phase1.getFuelStation() != null) {
+            fuelStationX = phase1.getFuelStation().x;
+            fuelStationY = phase1.getFuelStation().y;
+        }
+        return customThink();
+    }
 
+    private TWThought customThink() {
         locateFuelStation();
 
         int ax = getX();

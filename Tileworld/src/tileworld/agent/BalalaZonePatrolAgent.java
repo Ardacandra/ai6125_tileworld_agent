@@ -64,7 +64,7 @@ public class BalalaZonePatrolAgent extends TWAgent {
      * but short enough that Phase 2 gets most of the 5000 steps.
      * Tune lower (e.g. 200) if solo performance matters more.
      */
-    private static final int    PHASE1_TIMEOUT     = 300;
+    private static final int    PHASE1_TIMEOUT     = 150;
 
     private static final double EMERGENCY_BUFFER   = 60.0;
     private static final double EMERGENCY_UNKNOWN  = 0.45;

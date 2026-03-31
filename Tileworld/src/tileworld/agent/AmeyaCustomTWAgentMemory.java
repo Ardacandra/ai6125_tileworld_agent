@@ -14,7 +14,7 @@ import tileworld.environment.TWObject;
 import tileworld.environment.TWObstacle;
 import tileworld.environment.TWTile;
 
-public class AmeyaCustomTWAgentMemory extends TWAgentWorkingMemory {
+public class AmeyaAmeyaCustomTWAgentMemory extends TWAgentWorkingMemory {
 
     private static final double TILE_HOLE_MEMORY_STEPS = Parameters.lifeTime * 0.8;
 
@@ -42,7 +42,7 @@ public class AmeyaCustomTWAgentMemory extends TWAgentWorkingMemory {
     private final Schedule schedule;
     private final TWAgent me;
 
-    public AmeyaCustomTWAgentMemory(TWAgent agent, Schedule schedule, int x, int y) {
+    public AmeyaAmeyaCustomTWAgentMemory(TWAgent agent, Schedule schedule, int x, int y) {
         super(agent, schedule, x, y);
         this.me       = agent;
         this.schedule = schedule;

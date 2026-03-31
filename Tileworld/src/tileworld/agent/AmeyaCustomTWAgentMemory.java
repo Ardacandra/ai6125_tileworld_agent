@@ -14,15 +14,17 @@ import tileworld.environment.TWObject;
 import tileworld.environment.TWObstacle;
 import tileworld.environment.TWTile;
 
-public class AmeyaAmeyaCustomTWAgentMemory extends TWAgentWorkingMemory {
+public class AmeyaCustomTWAgentMemory extends TWAgentWorkingMemory {
+
 
     private static final double TILE_HOLE_MEMORY_STEPS = Parameters.lifeTime * 0.8;
+
 
     public static class MemoryEntry {
         public final int x;
         public final int y;
-        public final double observedAt;
-        public final double utility;
+        public final double observedAt;  // simulation time last seen
+        public final double utility;     // higher = better target
 
         public MemoryEntry(int x, int y, double observedAt, double utility) {
             this.x = x;
@@ -32,23 +34,27 @@ public class AmeyaAmeyaCustomTWAgentMemory extends TWAgentWorkingMemory {
         }
     }
 
-    private final Map<Integer, double[]> trackedTiles     = new HashMap<>();
-    private final Map<Integer, double[]> trackedHoles     = new HashMap<>();
 
+    protected final Map<Integer, double[]> trackedTiles  = new HashMap<>();
+    protected final Map<Integer, double[]> trackedHoles  = new HashMap<>();
+
+ 
     private final Map<Integer, int[]> knownObstacles = new HashMap<>();
 
-    private final int width;
-    private final int height;
-    private final Schedule schedule;
-    private final TWAgent me;
+    protected final int width;
+    protected final int height;
+    protected final Schedule schedule;
+    protected final TWAgent me;
 
-    public AmeyaAmeyaCustomTWAgentMemory(TWAgent agent, Schedule schedule, int x, int y) {
+
+    public AmeyaCustomTWAgentMemory(TWAgent agent, Schedule schedule, int x, int y) {
         super(agent, schedule, x, y);
         this.me       = agent;
         this.schedule = schedule;
         this.width    = x;
         this.height   = y;
     }
+
 
     @Override
     public void updateMemory(sim.util.Bag sensedObjects,
@@ -73,6 +79,7 @@ public class AmeyaAmeyaCustomTWAgentMemory extends TWAgentWorkingMemory {
             if (o instanceof TWObstacle) {
                 knownObstacles.put(key, new int[]{o.getX(), o.getY()});
             } else if (o instanceof TWTile) {
+                // [observedTime, x, y]
                 trackedTiles.put(key, new double[]{now, o.getX(), o.getY()});
             } else if (o instanceof TWHole) {
                 trackedHoles.put(key, new double[]{now, o.getX(), o.getY()});
@@ -81,6 +88,7 @@ public class AmeyaAmeyaCustomTWAgentMemory extends TWAgentWorkingMemory {
 
         decayMemory();
     }
+
 
     @Override
     public void decayMemory() {
@@ -163,13 +171,34 @@ public class AmeyaAmeyaCustomTWAgentMemory extends TWAgentWorkingMemory {
         return entries;
     }
 
+
     @Override
     public boolean isCellBlocked(int tx, int ty) {
         if (super.isCellBlocked(tx, ty)) return true;
         return knownObstacles.containsKey(pack(tx, ty));
     }
 
-    private int pack(int x, int y)  { return y * width + x; }
-    private int unpackX(int packed) { return packed % width; }
-    private int unpackY(int packed) { return packed / width; }
+    protected void addTrackedTile(int x, int y, double timestamp) {
+        trackedTiles.put(pack(x, y), new double[]{timestamp, x, y});
+    }
+
+    protected void addTrackedHole(int x, int y, double timestamp) {
+        trackedHoles.put(pack(x, y), new double[]{timestamp, x, y});
+    }
+
+    protected void removeTrackedTile(int x, int y) {
+        trackedTiles.remove(pack(x, y));
+    }
+
+    protected void removeTrackedHole(int x, int y) {
+        trackedHoles.remove(pack(x, y));
+    }
+
+    protected TWAgent getAgent() {
+        return me;
+    }
+
+    protected int pack(int x, int y)  { return y * width + x; }
+    protected int unpackX(int packed) { return packed % width; }
+    protected int unpackY(int packed) { return packed / width; }
 }

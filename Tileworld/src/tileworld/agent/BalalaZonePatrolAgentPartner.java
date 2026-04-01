@@ -15,7 +15,7 @@ import tileworld.planners.TWPath;
 /**
  * BalalaZonePatrolAgentPartner
  *
- * Extends ArdaTWAgentSkeleton which handles:
+ * Extends TWAgentSkeleton which handles:
  *   - Phase 1 zone sweep + fuel station discovery (via Phase1Strategy)
  *   - communicate() pipeline (final in skeleton)
  *   - think() pipeline (final in skeleton)
@@ -45,13 +45,13 @@ import tileworld.planners.TWPath;
  *   HOLE_BIAS_MARGIN= 6.0  (midpoint between Config1=12, Config2=4)
  *
  * ── RULES RESPECTED ──────────────────────────────────────────────
- * - Extends ArdaTWAgentSkeleton (which extends TWAgent)
+ * - Extends TWAgentSkeleton (which extends TWAgent)
  * - communicate() and think() NOT overridden (final in skeleton)
  * - Does NOT call increaseReward() directly
  * - Does NOT modify the environment package
  * - Fuel station found only within sensor range (spec compliant)
  */
-public class BalalaZonePatrolAgentPartner extends ArdaTWAgentSkeleton {
+public class BalalaZonePatrolAgentPartner extends TWAgentSkeleton {
 
     // ---------------------------------------------------------------
     // Constants

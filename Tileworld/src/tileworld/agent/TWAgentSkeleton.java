@@ -16,7 +16,7 @@ import sim.util.Int2D;
  * The skeleton class for all team agents.
  * Encapsulates Phase 1 exploration, base communication, and shared state.
  */
-public abstract class ArdaTWAgentSkeleton extends TWAgent {
+public abstract class TWAgentSkeleton extends TWAgent {
 
     // --- Shared Constants ---
     protected static final String ENTITY_TILE = "tile";
@@ -68,7 +68,7 @@ public abstract class ArdaTWAgentSkeleton extends TWAgent {
         }
     }
 
-    public ArdaTWAgentSkeleton(String name, int xpos, int ypos, TWEnvironment env, double fuelLevel) {
+    public TWAgentSkeleton(String name, int xpos, int ypos, TWEnvironment env, double fuelLevel) {
         super(xpos, ypos, env, fuelLevel);
         this.agentName = name;
         this.phase1 = new Phase1Strategy(this);

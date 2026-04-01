@@ -10,7 +10,7 @@ import tileworld.planners.AstarPathGenerator;
 import tileworld.planners.TWPath;
 import tileworld.planners.TWPathStep;
 
-public class ArdaTWAgent_v2 extends ArdaTWAgentSkeleton {
+public class ArdaTWAgent_v2 extends TWAgentSkeleton {
 
     private static final int MANHATTAN_OBSTACLE_PENALTY = 10;
     private static final double SAFETY_MARGIN_RATIO = 0.20; // Adjust this to tune refuel behavior

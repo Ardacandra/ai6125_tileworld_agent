@@ -57,22 +57,16 @@ public class AssessmentRunner {
         String className = "";
         int runsObserved;
         int totalScore;
-        double totalFinalFuel;
         int ranOutCount;
         int totalRefuelCount;
-        int totalMaxTilesCarried;
         int peakTilesCarried;
-        double totalFuelConsumed;
         long totalIdleSteps;
 
-        void addRun(int score, double finalFuel, boolean ranOut, int refuelCount,
-                int maxTilesCarried, double fuelConsumed, long idleSteps) {
+        void addRun(int score, boolean ranOut, int refuelCount,
+                int maxTilesCarried, long idleSteps) {
             runsObserved++;
             totalScore += score;
-            totalFinalFuel += finalFuel;
             totalRefuelCount += refuelCount;
-            totalMaxTilesCarried += maxTilesCarried;
-            totalFuelConsumed += fuelConsumed;
             totalIdleSteps += idleSteps;
             peakTilesCarried = Math.max(peakTilesCarried, maxTilesCarried);
             if (ranOut) {
@@ -97,19 +91,19 @@ public class AssessmentRunner {
     public static void main(String[] args) {
         Config config1 = new Config("Configuration 1", 50, 50, 0.2, 0.05, 100, 500, 6);
         Config config2 = new Config("Configuration 2", 80, 80, 2.0, 0.5, 30, 500, 6);
-        Config explorationConfig1 = new Config("Exploration Config 30x30", 30, 30, 0.2, 0.05, 100, 500, 6);
-        Config explorationConfig2 = new Config("Exploration Config 100x100", 100, 100, 0.2, 0.05, 100, 500, 6);
-        Config explorationConfig3 = new Config("Exploration Config 120x120", 120, 120, 0.2, 0.05, 100, 500, 6);
-        Config explorationConfig4 = new Config("Exploration Config 150x150", 150, 150, 0.2, 0.05, 100, 500, 6);
-        Config explorationConfig5 = new Config("Exploration Config 200x200", 200, 200, 0.2, 0.05, 100, 500, 6);
+        // Config explorationConfig1 = new Config("Exploration Config 30x30", 30, 30, 0.2, 0.05, 100, 500, 6);
+        // Config explorationConfig2 = new Config("Exploration Config 100x100", 100, 100, 0.2, 0.05, 100, 500, 6);
+        // Config explorationConfig3 = new Config("Exploration Config 120x120", 120, 120, 0.2, 0.05, 100, 500, 6);
+        // Config explorationConfig4 = new Config("Exploration Config 150x150", 150, 150, 0.2, 0.05, 100, 500, 6);
+        // Config explorationConfig5 = new Config("Exploration Config 200x200", 200, 200, 0.2, 0.05, 100, 500, 6);
 
         runConfiguration(config1);
         runConfiguration(config2);
-        runConfiguration(explorationConfig1);
-        runConfiguration(explorationConfig2);
-        runConfiguration(explorationConfig3);
-        runConfiguration(explorationConfig4);
-        runConfiguration(explorationConfig5);
+        // runConfiguration(explorationConfig1);
+        // runConfiguration(explorationConfig2);
+        // runConfiguration(explorationConfig3);
+        // runConfiguration(explorationConfig4);
+        // runConfiguration(explorationConfig5);
     }
 
     private static void runConfiguration(Config config) {
@@ -138,7 +132,6 @@ public class AssessmentRunner {
             for (Map.Entry<String, Integer> scoreEntry : summary.scoreByAgent.entrySet()) {
                 String agentName = scoreEntry.getKey();
                 int score = scoreEntry.getValue();
-                double finalFuel = summary.finalFuelByAgent.get(agentName);
                 boolean ranOut = summary.ranOutAgents.contains(agentName);
                 int refuels = summary.refuelCountByAgent.get(agentName);
                 int maxTiles = summary.maxTilesByAgent.get(agentName);
@@ -151,7 +144,7 @@ public class AssessmentRunner {
                     aggregate.className = summary.classNameByAgent.getOrDefault(agentName, "");
                     perAgent.put(agentName, aggregate);
                 }
-                aggregate.addRun(score, finalFuel, ranOut, refuels, maxTiles, fuelConsumed, idleSteps);
+                aggregate.addRun(score, ranOut, refuels, maxTiles, idleSteps);
                 totalRefuelsAcrossRuns += refuels;
                 totalFuelConsumedAcrossRuns += fuelConsumed;
                 totalIdleStepsAcrossRuns += idleSteps;
@@ -190,18 +183,12 @@ public class AssessmentRunner {
             String agent = entry.getKey();
             AgentAggregate agg = entry.getValue();
             double avgScore = agg.totalScore / (double) agg.runsObserved;
-            double avgFinalFuel = agg.totalFinalFuel / (double) agg.runsObserved;
             double avgRefuels = agg.totalRefuelCount / (double) agg.runsObserved;
-            double avgMaxTiles = agg.totalMaxTilesCarried / (double) agg.runsObserved;
-            double avgFuelConsumed = agg.totalFuelConsumed / (double) agg.runsObserved;
             double idleRatio = 100.0 * agg.totalIdleSteps / (agg.runsObserved * (double) STEPS);
             System.out.println(agent + " (" + agg.className + ")"
                     + " | avgReward=" + String.format("%.2f", avgScore)
-                    + " | avgFinalFuel=" + String.format("%.2f", avgFinalFuel)
                 + " | avgRefuels=" + String.format("%.2f", avgRefuels)
-                + " | avgMaxTilesCarried=" + String.format("%.2f", avgMaxTiles)
                 + " | peakTilesCarried=" + agg.peakTilesCarried
-                + " | avgFuelConsumed=" + String.format("%.2f", avgFuelConsumed)
                 + " | idleRatio=" + String.format("%.2f", idleRatio) + "%"
                 + " | ranOutInRuns=" + agg.ranOutCount + "/" + RUNS_PER_CONFIG);
         }

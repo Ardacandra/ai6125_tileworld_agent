@@ -22,6 +22,9 @@ public abstract class TWAgentSkeleton extends TWAgent {
     protected static final String ENTITY_TILE = "tile";
     protected static final String ENTITY_HOLE = "hole";
     protected static final String ENTITY_FUEL = "fuel";
+    protected static final String ENTITY_DELETE_TILE = "delete_tile";
+    protected static final String ENTITY_DELETE_HOLE = "delete_hole";
+
     protected static final int CARRY_CAPACITY = 3;
 
     // --- Shared State ---

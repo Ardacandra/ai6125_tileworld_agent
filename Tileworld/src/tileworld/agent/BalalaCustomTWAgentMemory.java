@@ -41,7 +41,7 @@ public class BalalaCustomTWAgentMemory extends TWAgentWorkingMemory {
     private final List<MemoryEntry> knownHoles = new ArrayList<MemoryEntry>();
 
     public BalalaCustomTWAgentMemory(TWAgent owner, Schedule schedule,
-                                     int xDim, int yDim) {
+                               int xDim, int yDim) {
         super(owner, schedule, xDim, yDim);
         this.owner    = owner;
         this.schedule = schedule;

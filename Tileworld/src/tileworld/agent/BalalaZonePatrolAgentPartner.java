@@ -2,12 +2,10 @@ package tileworld.agent;
 
 import java.util.ArrayList;
 import java.util.List;
-import sim.util.Int2D;
 import tileworld.Parameters;
 import tileworld.environment.TWDirection;
 import tileworld.environment.TWEntity;
 import tileworld.environment.TWEnvironment;
-import tileworld.environment.TWFuelStation;
 import tileworld.environment.TWHole;
 import tileworld.environment.TWTile;
 import tileworld.exceptions.CellBlockedException;
@@ -15,92 +13,58 @@ import tileworld.planners.AstarPathGenerator;
 import tileworld.planners.TWPath;
 
 /**
- * ZonePatrolAgent — Final balanced version
+ * BalalaZonePatrolAgentPartner
  *
- * Constants tuned to balance Config 1 and Config 2:
+ * Extends ArdaTWAgentSkeleton which handles:
+ *   - Phase 1 zone sweep + fuel station discovery (via Phase1Strategy)
+ *   - communicate() pipeline (final in skeleton)
+ *   - think() pipeline (final in skeleton)
+ *   - processSharedMessages() — auto-extracts fuel station from broadcasts
+ *   - fuelStationX / fuelStationY shared state
+ *   - manhattan() helper
  *
- *   Config 1: sparse (mu=0.2), lifetime=100, 50x50
- *   Config 2: dense  (mu=2.0), lifetime=30,  80x80
- *   Config 3: unknown — balanced values are safest bet
+ * This class implements the four abstract hooks:
+ *   - customCommunicate() — Phase 2 position broadcast via ArdaMessage
+ *   - handleTeamMessage() — reads teammate positions for proximity yield
+ *   - customThink()       — Phase 2 decision logic
+ *   - act()               — executes chosen action
  *
- * Constant derivations:
- *
- *   PHASE1_TIMEOUT = 200
- *     Config 1 wants ~150 (switch to full sweep sooner)
- *     Config 2 wants ~300 (but station found before timeout anyway)
- *     200 is safe for both — frees Phase 2 sooner in Config 1
- *     without affecting Config 2 where Phase 1 finishes naturally.
- *
- *   W_RECENCY = 0.35, W_PROXIMITY = 0.65
- *     Lifetime ratio Config1/Config2 = 100/30 = 3.3x
- *     Config 2 optimal: proximity=0.75 (objects expire fast, go nearest)
- *     Config 1 optimal: proximity=0.60 (old memories still valid)
- *     Balanced midpoint: (0.75+0.60)/2 = 0.675 → rounded to 0.65
- *     Small nudge toward recency helps Config 1 without hurting Config 2.
- *
- *   HOLE_BIAS_MARGIN = 6.0
- *     Config 2 wants 4.0  (holes expire at 30 steps — deposit fast)
- *     Config 1 wants 12.0 (holes last 100 steps — fill up first)
- *     Weighted by lifetime: 4 + (12-4)*(30/100) = 6.0
- *     Agent is willing to pick up a 3rd tile if it's within 6 steps
- *     closer than the nearest hole, balancing both configs.
- *
- * ── PHASE 1 (via Phase1Strategy) ─────────────────────────────────
- * - Map divided into 6 zones (2 cols x 3 rows)
- * - Each agent claims the zone nearest its spawn — no overlap
- * - Boustrophedon sweep per zone with sensor-range waypoints
- * - First agent to sense fuel station broadcasts via ArdaMessage
- * - All agents switch to Phase 2 the moment station is known
- * - Force-switches to Phase 2 after PHASE1_TIMEOUT steps
- *
- * ── PHASE 2 ───────────────────────────────────────────────────────
- * - Full map boustrophedon sweep, SWEEP_STEP jumps, starts at spawn
- * - Scored memory targeting with balanced recency/proximity weights
- * - Stale hole validation — removes expired holes from memory
- * - Time-aware fuel margin: 40 steps early → 15 steps late
- * - Position broadcast via ArdaMessage ("pos" entity type)
- * - Proximity yield: skip targets a closer capable teammate will reach
+ * ── PHASE 1 TIMEOUT ──────────────────────────────────────────────
+ * If Phase 1 hasn't finished by PHASE1_TIMEOUT steps, customThink()
+ * takes over even without a known fuel station. Phase 2's full-map
+ * sweep will find the station eventually.
  *
  * ── FUEL EMERGENCY ───────────────────────────────────────────────
- * Global emergency check runs BEFORE all phase logic.
- * Threshold = dist_to_station + 60. Station unknown = 45% of max fuel.
+ * customThink() starts with a global fuel emergency check that runs
+ * before all other logic, preventing the agent from running dry.
+ *
+ * ── CONSTANTS — balanced for Config 1, 2, and unknown Config 3 ───
+ *   PHASE1_TIMEOUT  = 200  (Config 1: needs early Phase 2 switch)
+ *   W_RECENCY       = 0.35 (Config 1: old memories last 100 steps)
+ *   W_PROXIMITY     = 0.65 (Config 2: still proximity-dominant)
+ *   HOLE_BIAS_MARGIN= 6.0  (midpoint between Config1=12, Config2=4)
  *
  * ── RULES RESPECTED ──────────────────────────────────────────────
- * - Extends TWAgent only
- * - Overrides only communicate(), think(), act()
+ * - Extends ArdaTWAgentSkeleton (which extends TWAgent)
+ * - communicate() and think() NOT overridden (final in skeleton)
  * - Does NOT call increaseReward() directly
  * - Does NOT modify the environment package
- * - Fuel station discovered only within sensor range (spec compliant)
+ * - Fuel station found only within sensor range (spec compliant)
  */
-public class BalalaZonePatrolAgent extends TWAgent {
+public class BalalaZonePatrolAgentPartner extends ArdaTWAgentSkeleton {
 
     // ---------------------------------------------------------------
-    // Tuned constants — balanced for Config 1, 2 and unknown Config 3
+    // Constants
     // ---------------------------------------------------------------
-
-    /** Steps before Phase 1 is force-abandoned. */
     private static final int    PHASE1_TIMEOUT     = 150;
-
-    /** Recency weight — slight increase from 0.25 helps Config 1. */
-    private static final double W_RECENCY          = 0.35;
-
-    /** Proximity weight — slight decrease from 0.75, still dominant. */
-    private static final double W_PROXIMITY        = 0.65;
-
-    /**
-     * Hole bias margin — balanced between Config 1 (12) and Config 2 (4).
-     * When carrying 2 tiles, pick up a 3rd only if the tile is this many
-     * steps closer than the nearest hole.
-     */
-    private static final double HOLE_BIAS_MARGIN   = 6.0;
-
-    // Fixed constants
     private static final double EMERGENCY_BUFFER   = 15.0;
     private static final double EMERGENCY_UNKNOWN  = 0.25;
     private static final double FUEL_SAFETY_EARLY  = 20.0;
     private static final double FUEL_SAFETY_LATE   = 5.0;
     private static final double FUEL_UNKNOWN_RATIO = 0.20;
-    private static final int    CARRY_CAPACITY     = 3;
+    private static final double W_RECENCY          = 0.35;
+    private static final double W_PROXIMITY        = 0.65;
+    private static final double HOLE_BIAS_MARGIN   = 6.0;
     private static final int    SWEEP_STEP         = Parameters.defaultSensorRange;
     private static final double EARLY_PHASE        = 0.20;
     private static final String ENTITY_POS         = "pos";
@@ -108,18 +72,14 @@ public class BalalaZonePatrolAgent extends TWAgent {
     // ---------------------------------------------------------------
     // Fields
     // ---------------------------------------------------------------
-    private final String             name;
-    private final AstarPathGenerator pathGenerator;
-    private BalalaCustomTWAgentMemory      customMemory;
-    private final Phase1Strategy     phase1;
+    private final AstarPathGenerator  pathGenerator;
+    private BalalaCustomTWAgentMemory customMemory;
 
     private boolean phase1Done = false;
 
-    private int fuelStationX = -1;
-    private int fuelStationY = -1;
-
     private final List<int[]> teammateSnapshots = new ArrayList<int[]>();
 
+    // Phase 2 sweep — starts at spawn
     private int     sweepCol;
     private int     sweepRow;
     private boolean sweepGoingDown;
@@ -127,10 +87,9 @@ public class BalalaZonePatrolAgent extends TWAgent {
     // ---------------------------------------------------------------
     // Constructor
     // ---------------------------------------------------------------
-    public BalalaZonePatrolAgent(String name, int xpos, int ypos,
-                           TWEnvironment env, double fuelLevel) {
-        super(xpos, ypos, env, fuelLevel);
-        this.name = name;
+    public BalalaZonePatrolAgentPartner(String name, int xpos, int ypos,
+                                        TWEnvironment env, double fuelLevel) {
+        super(name, xpos, ypos, env, fuelLevel);
 
         this.customMemory = new BalalaCustomTWAgentMemory(
                 this, env.schedule,
@@ -141,47 +100,60 @@ public class BalalaZonePatrolAgent extends TWAgent {
                 env, this,
                 env.getxDimension() * env.getyDimension());
 
-        this.phase1 = new Phase1Strategy(this);
-
         this.sweepCol       = xpos;
         this.sweepRow       = ypos;
         this.sweepGoingDown = true;
     }
 
     // ---------------------------------------------------------------
-    // communicate
+    // HOOK 1: customCommunicate
     // ---------------------------------------------------------------
     @Override
-    public void communicate() {
-        phase1.communicate();
-        if (!phase1Done) return;
-
+    protected void customCommunicate() {
         getEnvironment().receiveMessage(
-                ArdaMessage.info(name, ENTITY_POS,
+                ArdaMessage.info(agentName, ENTITY_POS,
                         getX(), getY(),
                         carriedTiles.size(), 0));
     }
 
     // ---------------------------------------------------------------
-    // think
+    // HOOK 2: handleTeamMessage
     // ---------------------------------------------------------------
     @Override
-    protected TWThought think() {
+    protected void handleTeamMessage(ArdaMessage msg) {
+        if (ENTITY_POS.equals(msg.getEntityType())) {
+            teammateSnapshots.add(new int[]{
+                msg.getX(), msg.getY(), msg.getSenderX()
+            });
+        }
+    }
 
-        locateFuelStation();
+    // ---------------------------------------------------------------
+    // HOOK 3: customThink
+    // ---------------------------------------------------------------
+    @Override
+    protected TWThought customThink() {
 
-        if (fuelStationX == -1 && phase1.getFuelStation() != null) {
-            Int2D fs = phase1.getFuelStation();
-            fuelStationX = fs.x;
-            fuelStationY = fs.y;
+        // Rebuild snapshots fresh each step
+        teammateSnapshots.clear();
+        for (Message raw : getEnvironment().getMessages()) {
+            if (agentName.equals(raw.getFrom())) continue;
+            if (!(raw instanceof ArdaMessage)) continue;
+            ArdaMessage am = (ArdaMessage) raw;
+            if (ENTITY_POS.equals(am.getEntityType())) {
+                teammateSnapshots.add(new int[]{
+                    am.getX(), am.getY(), am.getSenderX()
+                });
+            }
         }
 
         checkPhase1Timeout();
 
-        int ax = getX();
-        int ay = getY();
+        int    ax  = getX();
+        int    ay  = getY();
+        double now = getEnvironment().schedule.getTime();
 
-        // ── GLOBAL FUEL EMERGENCY ─────────────────────────────────
+        // Global fuel emergency — runs before everything
         if (isFuelEmergency(ax, ay)) {
             if (fuelStationX == -1) {
                 return new TWThought(TWAction.MOVE,
@@ -195,40 +167,6 @@ public class BalalaZonePatrolAgent extends TWAgent {
                     pathTo(fuelStationX, fuelStationY));
         }
 
-        // ── PHASE 1 ───────────────────────────────────────────────
-        if (!phase1Done) {
-            TWThought t = phase1.think();
-            if (t != null) return t;
-            phase1Done = true;
-            System.out.println(name + " Phase 1 complete — switching to Phase 2");
-        }
-
-        // ── PHASE 2 ───────────────────────────────────────────────
-        return phase2Think(ax, ay);
-    }
-
-    // ---------------------------------------------------------------
-    // Phase 1 timeout
-    // ---------------------------------------------------------------
-    private void checkPhase1Timeout() {
-        if (phase1Done) return;
-        if (phase1.isComplete()) { phase1Done = true; return; }
-        double now = getEnvironment().schedule.getTime();
-        if (now >= PHASE1_TIMEOUT) {
-            phase1Done = true;
-            System.out.println(name + " Phase 1 TIMEOUT at step "
-                    + (int) now + " — switching to Phase 2");
-        }
-    }
-
-    // ---------------------------------------------------------------
-    // Phase 2 decision logic
-    // ---------------------------------------------------------------
-    private TWThought phase2Think(int ax, int ay) {
-
-        readTeammateSnapshots();
-
-        double  now        = getEnvironment().schedule.getTime();
         boolean earlyPhase = isEarlyPhase(now);
 
         // 1. Normal fuel check
@@ -279,7 +217,7 @@ public class BalalaZonePatrolAgent extends TWAgent {
     }
 
     // ---------------------------------------------------------------
-    // act
+    // HOOK 4: act
     // ---------------------------------------------------------------
     @Override
     protected void act(TWThought thought) {
@@ -316,24 +254,16 @@ public class BalalaZonePatrolAgent extends TWAgent {
     }
 
     // ---------------------------------------------------------------
-    // FUEL STATION — sensor-range only (spec compliant)
+    // PHASE 1 TIMEOUT
     // ---------------------------------------------------------------
-    private void locateFuelStation() {
-        if (fuelStationX != -1) return;
-        int range = Parameters.defaultSensorRange;
-        for (int dx = -range; dx <= range; dx++) {
-            for (int dy = -range; dy <= range; dy++) {
-                int nx = getX() + dx;
-                int ny = getY() + dy;
-                if (!getEnvironment().isInBounds(nx, ny)) continue;
-                TWEntity obj = (TWEntity) getEnvironment()
-                        .getObjectGrid().get(nx, ny);
-                if (obj instanceof TWFuelStation) {
-                    fuelStationX = nx;
-                    fuelStationY = ny;
-                    return;
-                }
-            }
+    private void checkPhase1Timeout() {
+        if (phase1Done) return;
+        if (phase1.isComplete()) { phase1Done = true; return; }
+        double now = getEnvironment().schedule.getTime();
+        if (now >= PHASE1_TIMEOUT) {
+            phase1Done = true;
+            System.out.println(agentName + " Phase 1 TIMEOUT at step "
+                    + (int) now + " — switching to Phase 2");
         }
     }
 
@@ -370,23 +300,8 @@ public class BalalaZonePatrolAgent extends TWAgent {
     }
 
     // ---------------------------------------------------------------
-    // COMMUNICATION — ArdaMessage "pos" entity type
+    // PROXIMITY YIELD
     // ---------------------------------------------------------------
-    private void readTeammateSnapshots() {
-        teammateSnapshots.clear();
-        ArrayList<Message> messages = getEnvironment().getMessages();
-        for (int i = 0; i < messages.size(); i++) {
-            Message m = messages.get(i);
-            if (m.getFrom().equals(name)) continue;
-            if (!(m instanceof ArdaMessage)) continue;
-            ArdaMessage am = (ArdaMessage) m;
-            if (!ENTITY_POS.equals(am.getEntityType())) continue;
-            teammateSnapshots.add(new int[]{
-                am.getX(), am.getY(), am.getSenderX()
-            });
-        }
-    }
-
     private boolean teammateCloserForTile(int tx, int ty, int myDist) {
         for (int i = 0; i < teammateSnapshots.size(); i++) {
             int[] s = teammateSnapshots.get(i);
@@ -411,8 +326,10 @@ public class BalalaZonePatrolAgent extends TWAgent {
     private BalalaCustomTWAgentMemory.MemoryEntry selectTarget(
             int ax, int ay, boolean earlyPhase) {
 
-        List<BalalaCustomTWAgentMemory.MemoryEntry> tiles = customMemory.getKnownTiles();
-        List<BalalaCustomTWAgentMemory.MemoryEntry> holes = customMemory.getKnownHoles();
+        List<BalalaCustomTWAgentMemory.MemoryEntry> tiles =
+                customMemory.getKnownTiles();
+        List<BalalaCustomTWAgentMemory.MemoryEntry> holes =
+                customMemory.getKnownHoles();
 
         reScore(tiles, ax, ay);
         reScore(holes, ax, ay);
@@ -477,7 +394,8 @@ public class BalalaZonePatrolAgent extends TWAgent {
 
     private BalalaCustomTWAgentMemory.MemoryEntry nearestValidYieldedHole(
             int ax, int ay) {
-        List<BalalaCustomTWAgentMemory.MemoryEntry> holes = customMemory.getKnownHoles();
+        List<BalalaCustomTWAgentMemory.MemoryEntry> holes =
+                customMemory.getKnownHoles();
         BalalaCustomTWAgentMemory.MemoryEntry nearest = null;
         double minDist = Double.MAX_VALUE;
         List<BalalaCustomTWAgentMemory.MemoryEntry> stale =
@@ -513,7 +431,7 @@ public class BalalaZonePatrolAgent extends TWAgent {
     }
 
     // ---------------------------------------------------------------
-    // BOUSTROPHEDON SWEEP
+    // SWEEP
     // ---------------------------------------------------------------
     private TWDirection nextSweepDirection(int ax, int ay) {
         int maxX = getEnvironment().getxDimension() - 1;
@@ -577,14 +495,4 @@ public class BalalaZonePatrolAgent extends TWAgent {
         }
         return TWDirection.Z;
     }
-
-    // ---------------------------------------------------------------
-    // HELPERS
-    // ---------------------------------------------------------------
-    private double manhattan(int x1, int y1, int x2, int y2) {
-        return Math.abs(x1 - x2) + Math.abs(y1 - y2);
-    }
-
-    @Override
-    public String getName() { return name; }
 }

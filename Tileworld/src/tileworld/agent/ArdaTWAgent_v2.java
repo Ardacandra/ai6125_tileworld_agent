@@ -3,6 +3,8 @@ package tileworld.agent;
 import java.util.concurrent.ThreadLocalRandom;
 import tileworld.environment.TWDirection;
 import tileworld.environment.TWEnvironment;
+import tileworld.environment.TWHole;
+import tileworld.environment.TWTile;
 import tileworld.exceptions.CellBlockedException;
 import tileworld.planners.AstarPathGenerator;
 import tileworld.planners.TWPath;
@@ -48,16 +50,61 @@ public class ArdaTWAgent_v2 extends ArdaTWAgentSkeleton {
             return new TWThought(TWAction.MOVE, nextStepAlongPath());
         }
 
+        TWTile tileHere = getTileAtCurrentPosition();
+        if (tileHere != null && carriedTiles.size() < CARRY_CAPACITY) {
+            return new TWThought(TWAction.PICKUP, TWDirection.Z);
+        }
+
+        TWHole holeHere = getHoleAtCurrentPosition();
+        if (holeHere != null && hasTile()) {
+            return new TWThought(TWAction.PUTDOWN, TWDirection.Z);
+        }
+
+        int[] closestTile = getClosestTileTarget();
+        int[] closestHole = getClosestHoleTarget();
+        int tileDistance = (closestTile == null) ? Integer.MAX_VALUE : manhattanDistanceTo(closestTile[0], closestTile[1]);
+        int holeDistance = (closestHole == null) ? Integer.MAX_VALUE : manhattanDistanceTo(closestHole[0], closestHole[1]);
+
+        if (hasTile() && closestHole != null && holeDistance < tileDistance) {
+            return new TWThought(TWAction.MOVE, nextStepTowardTarget(closestHole[0], closestHole[1]));
+        }
+
+        if (carriedTiles.size() < CARRY_CAPACITY && closestTile != null && tileDistance <= holeDistance) {
+            return new TWThought(TWAction.MOVE, nextStepTowardTarget(closestTile[0], closestTile[1]));
+        }
+
+        if (hasTile() && closestHole != null) {
+            return new TWThought(TWAction.MOVE, nextStepTowardTarget(closestHole[0], closestHole[1]));
+        }
+
         return new TWThought(TWAction.MOVE, getRandomDirection());
     }
 
     @Override
     protected void act(TWThought thought) {
         try {
-            if (thought.getAction() == TWAction.REFUEL) {
-                this.refuel();
-            } else {
-                this.move(thought.getDirection());
+            switch (thought.getAction()) {
+                case REFUEL:
+                    this.refuel();
+                    break;
+                case PICKUP:
+                    TWTile tile = getTileAtCurrentPosition();
+                    if (tile != null && carriedTiles.size() < CARRY_CAPACITY) {
+                        this.pickUpTile(tile);
+                        customMemory.removeTile(this.getX(), this.getY());
+                    }
+                    break;
+                case PUTDOWN:
+                    TWHole hole = getHoleAtCurrentPosition();
+                    if (hole != null && hasTile()) {
+                        this.putTileInHole(hole);
+                        customMemory.removeHole(this.getX(), this.getY());
+                    }
+                    break;
+                case MOVE:
+                default:
+                    this.move(thought.getDirection());
+                    break;
             }
         } catch (CellBlockedException ex) {
             // Cell is blocked; try again next step.
@@ -126,9 +173,26 @@ public class ArdaTWAgent_v2 extends ArdaTWAgentSkeleton {
         return nextStepTowardFuel();
     }
 
+    private TWDirection nextStepTowardTarget(int targetX, int targetY) {
+        TWPath path = pathGenerator.findPath(this.getX(), this.getY(), targetX, targetY);
+
+        if (path != null && path.hasNext()) {
+            TWPathStep step = path.popNext();
+            if (step.getDirection() != TWDirection.Z) {
+                return step.getDirection();
+            }
+        }
+
+        return nextStepTowardCoordinates(targetX, targetY);
+    }
+
     private TWDirection nextStepTowardFuel() {
-        int dx = fuelStationX - this.getX();
-        int dy = fuelStationY - this.getY();
+        return nextStepTowardCoordinates(fuelStationX, fuelStationY);
+    }
+
+    private TWDirection nextStepTowardCoordinates(int targetX, int targetY) {
+        int dx = targetX - this.getX();
+        int dy = targetY - this.getY();
 
         TWDirection primary = Math.abs(dx) >= Math.abs(dy)
                 ? (dx > 0 ? TWDirection.E : TWDirection.W)
@@ -147,6 +211,68 @@ public class ArdaTWAgent_v2 extends ArdaTWAgentSkeleton {
         return getRandomDirection();
     }
 
+    private TWTile getTileAtCurrentPosition() {
+        TWTile observed = (TWTile) this.getMemory().getClosestObjectInSensorRange(TWTile.class);
+        if (observed != null && observed.getX() == this.getX() && observed.getY() == this.getY()) {
+            return observed;
+        }
+        return null;
+    }
+
+    private TWHole getHoleAtCurrentPosition() {
+        TWHole observed = (TWHole) this.getMemory().getClosestObjectInSensorRange(TWHole.class);
+        if (observed != null && observed.getX() == this.getX() && observed.getY() == this.getY()) {
+            return observed;
+        }
+        return null;
+    }
+
+    private int[] getClosestTileTarget() {
+        int bestDistance = Integer.MAX_VALUE;
+        int[] best = null;
+
+        TWTile observed = (TWTile) this.getMemory().getClosestObjectInSensorRange(TWTile.class);
+        if (observed != null) {
+            bestDistance = manhattanDistanceTo(observed.getX(), observed.getY());
+            best = new int[] { observed.getX(), observed.getY() };
+        }
+
+        for (ArdaCustomTWAgentMemory.MemoryEntry entry : customMemory.getKnownTiles()) {
+            int d = manhattanDistanceTo(entry.x, entry.y);
+            if (d < bestDistance) {
+                bestDistance = d;
+                best = new int[] { entry.x, entry.y };
+            }
+        }
+
+        return best;
+    }
+
+    private int[] getClosestHoleTarget() {
+        int bestDistance = Integer.MAX_VALUE;
+        int[] best = null;
+
+        TWHole observed = (TWHole) this.getMemory().getClosestObjectInSensorRange(TWHole.class);
+        if (observed != null) {
+            bestDistance = manhattanDistanceTo(observed.getX(), observed.getY());
+            best = new int[] { observed.getX(), observed.getY() };
+        }
+
+        for (ArdaCustomTWAgentMemory.MemoryEntry entry : customMemory.getKnownHoles()) {
+            int d = manhattanDistanceTo(entry.x, entry.y);
+            if (d < bestDistance) {
+                bestDistance = d;
+                best = new int[] { entry.x, entry.y };
+            }
+        }
+
+        return best;
+    }
+
+    private int manhattanDistanceTo(int targetX, int targetY) {
+        return Math.abs(targetX - this.getX()) + Math.abs(targetY - this.getY());
+    }
+
     private boolean canMove(TWDirection direction) {
         if (direction == TWDirection.Z) {
             return true;
@@ -155,7 +281,7 @@ public class ArdaTWAgent_v2 extends ArdaTWAgentSkeleton {
         int nextX = this.getX() + direction.dx;
         int nextY = this.getY() + direction.dy;
         return this.getEnvironment().isInBounds(nextX, nextY)
-                && !this.getEnvironment().isCellBlocked(nextX, nextY);
+                && !this.getMemory().isCellBlocked(nextX, nextY);
     }
 
     private TWDirection getRandomDirection() {

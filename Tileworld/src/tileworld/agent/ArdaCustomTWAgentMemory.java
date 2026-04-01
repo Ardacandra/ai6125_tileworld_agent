@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import sim.engine.Schedule;
-import sim.field.grid.ObjectGrid2D;
 import sim.util.Bag;
 import sim.util.IntBag;
 import tileworld.Parameters;
@@ -42,7 +41,7 @@ public class ArdaCustomTWAgentMemory extends TWAgentWorkingMemory {
     // Value layout: [observedAt, x, y]
     private final Map<Integer, double[]> trackedTiles = new HashMap<Integer, double[]>();
     private final Map<Integer, double[]> trackedHoles = new HashMap<Integer, double[]>();
-    private final Map<Integer, int[]> knownObstacles = new HashMap<Integer, int[]>();
+    private final Map<Integer, double[]> knownObstacles = new HashMap<Integer, double[]>();
 
     private final TWAgent owner;
     private final Schedule schedule;
@@ -78,7 +77,7 @@ public class ArdaCustomTWAgentMemory extends TWAgentWorkingMemory {
             int key = pack(object.getX(), object.getY());
 
             if (object instanceof TWObstacle) {
-                knownObstacles.put(key, new int[] { object.getX(), object.getY() });
+                knownObstacles.put(key, new double[] { now, object.getX(), object.getY() });
             } else if (object instanceof TWTile) {
                 trackedTiles.put(key, new double[] { now, object.getX(), object.getY() });
             } else if (object instanceof TWHole) {
@@ -92,7 +91,6 @@ public class ArdaCustomTWAgentMemory extends TWAgentWorkingMemory {
     @Override
     public void decayMemory() {
         double now = schedule.getTime();
-        ObjectGrid2D grid = owner.getEnvironment().getObjectGrid();
 
         Iterator<Map.Entry<Integer, double[]>> tileIterator = trackedTiles.entrySet().iterator();
         while (tileIterator.hasNext()) {
@@ -102,9 +100,8 @@ public class ArdaCustomTWAgentMemory extends TWAgentWorkingMemory {
             int y = (int) value[2];
 
             boolean stale = (now - value[0]) > MEMORY_HORIZON;
-            boolean gone = !(grid.get(x, y) instanceof TWTile);
 
-            if (stale || gone) {
+            if (stale) {
                 removeAgentPercept(x, y);
                 tileIterator.remove();
             }
@@ -118,20 +115,22 @@ public class ArdaCustomTWAgentMemory extends TWAgentWorkingMemory {
             int y = (int) value[2];
 
             boolean stale = (now - value[0]) > MEMORY_HORIZON;
-            boolean gone = !(grid.get(x, y) instanceof TWHole);
 
-            if (stale || gone) {
+            if (stale) {
                 removeAgentPercept(x, y);
                 holeIterator.remove();
             }
         }
 
-        Iterator<Map.Entry<Integer, int[]>> obstacleIterator = knownObstacles.entrySet().iterator();
+        Iterator<Map.Entry<Integer, double[]>> obstacleIterator = knownObstacles.entrySet().iterator();
         while (obstacleIterator.hasNext()) {
-            Map.Entry<Integer, int[]> entry = obstacleIterator.next();
-            int[] obstacle = entry.getValue();
-            if (!owner.getEnvironment().isCellBlocked(obstacle[0], obstacle[1])) {
-                removeAgentPercept(obstacle[0], obstacle[1]);
+            Map.Entry<Integer, double[]> entry = obstacleIterator.next();
+            double[] obstacle = entry.getValue();
+            int x = (int) obstacle[1];
+            int y = (int) obstacle[2];
+            boolean stale = (now - obstacle[0]) > MEMORY_HORIZON;
+            if (stale) {
+                removeAgentPercept(x, y);
                 obstacleIterator.remove();
             }
         }

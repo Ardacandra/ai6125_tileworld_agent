@@ -261,13 +261,18 @@ public class ArdaTWAgent_v1 extends TWAgent {
         Iterator<Map.Entry<String, SharedLocation>> iterator = map.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<String, SharedLocation> entry = iterator.next();
-            if (!isValidEntityAt(type, entry.getValue().x, entry.getValue().y)) {
+            if (!isPossiblyValidEntityAt(type, entry.getValue().x, entry.getValue().y)) {
                 iterator.remove();
             }
         }
     }
 
-    private boolean isValidEntityAt(String type, int x, int y) {
+    private boolean isPossiblyValidEntityAt(String type, int x, int y) {
+        // Do not peek globally. Only invalidate targets when they are inside current sensor range.
+        if (!isWithinSensorRange(x, y)) {
+            return true;
+        }
+
         Object obj = this.getEnvironment().getObjectGrid().get(x, y);
         if (TYPE_TILE.equals(type)) {
             return obj instanceof TWTile;
@@ -281,12 +286,17 @@ public class ArdaTWAgent_v1 extends TWAgent {
         return false;
     }
 
+    private boolean isWithinSensorRange(int x, int y) {
+        int range = Parameters.defaultSensorRange;
+        return Math.abs(x - this.getX()) <= range && Math.abs(y - this.getY()) <= range;
+    }
+
     private SharedLocation selectClosestTarget(String type, Map<String, SharedLocation> map) {
         SharedLocation best = null;
         double bestDistance = Double.MAX_VALUE;
 
         for (SharedLocation candidate : map.values()) {
-            if (!isValidEntityAt(type, candidate.x, candidate.y)) {
+            if (!isPossiblyValidEntityAt(type, candidate.x, candidate.y)) {
                 continue;
             }
             if (isClaimedByCloserAgent(type, candidate.x, candidate.y)) {

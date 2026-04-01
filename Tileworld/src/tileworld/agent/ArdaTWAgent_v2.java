@@ -1,17 +1,27 @@
 package tileworld.agent;
 
 import java.util.concurrent.ThreadLocalRandom;
-import tileworld.Parameters;
 import tileworld.environment.TWDirection;
 import tileworld.environment.TWEnvironment;
 import tileworld.exceptions.CellBlockedException;
+import tileworld.planners.AstarPathGenerator;
+import tileworld.planners.TWPath;
+import tileworld.planners.TWPathStep;
 
 public class ArdaTWAgent_v2 extends ArdaTWAgentSkeleton {
 
-    private static final double REFUEL_THRESHOLD_RATIO = 0.20;
+    private static final int MANHATTAN_OBSTACLE_PENALTY = 10;
+    private static final double SAFETY_MARGIN_RATIO = 0.20; // Adjust this to tune refuel behavior
+    private static final double MIN_FUEL_PERCENTAGE = 0.20; // Minimum fuel threshold as safety floor
+
+    private final AstarPathGenerator pathGenerator;
+    private final int safetyMargin;
 
     public ArdaTWAgent_v2(String name, int xpos, int ypos, TWEnvironment env, double fuelLevel) {
         super(name, xpos, ypos, env, fuelLevel);
+        this.pathGenerator = new AstarPathGenerator(env, this, env.getxDimension() * env.getyDimension());
+        // Calculate safety margin as a ratio of average grid dimension
+        this.safetyMargin = (int) ((env.getxDimension() + env.getyDimension()) / 2 * SAFETY_MARGIN_RATIO);
     }
 
     @Override
@@ -30,7 +40,7 @@ public class ArdaTWAgent_v2 extends ArdaTWAgentSkeleton {
             if (this.getX() == fuelStationX && this.getY() == fuelStationY) {
                 return new TWThought(TWAction.REFUEL, TWDirection.Z);
             }
-            return new TWThought(TWAction.MOVE, nextStepTowardFuel());
+            return new TWThought(TWAction.MOVE, nextStepAlongPath());
         }
 
         return new TWThought(TWAction.MOVE, getRandomDirection());
@@ -50,7 +60,65 @@ public class ArdaTWAgent_v2 extends ArdaTWAgentSkeleton {
     }
 
     private boolean shouldRefuel() {
-        return this.getFuelLevel() <= Parameters.defaultFuelLevel * REFUEL_THRESHOLD_RATIO;
+        if (fuelStationX < 0 || fuelStationY < 0) {
+            return false;
+        }
+
+        // Floor: always refuel if fuel drops below minimum percentage
+        boolean belowMinPercentage = this.getFuelLevel() <= tileworld.Parameters.defaultFuelLevel * MIN_FUEL_PERCENTAGE;
+        if (belowMinPercentage) {
+            System.out.println(this.getName() + " [RefuelV2] Below minimum fuel percentage (" 
+                    + MIN_FUEL_PERCENTAGE * 100 + "%). Fuel=" + this.getFuelLevel());
+            return true;
+        }
+
+        TWPath path = pathGenerator.findPath(this.getX(), this.getY(), fuelStationX, fuelStationY);
+
+        if (path == null) {
+            // No path in memory; use Manhattan as pessimistic estimate with obstacle penalty
+            int manhattanDist = Math.abs(fuelStationX - this.getX()) + Math.abs(fuelStationY - this.getY());
+            int estimatedCost = manhattanDist + MANHATTAN_OBSTACLE_PENALTY;
+            boolean shouldRefuel = this.getFuelLevel() <= estimatedCost + safetyMargin;
+            if (shouldRefuel) {
+                System.out.println(this.getName() + " [RefuelV2] Path blocked or not found. Manhattan=" + manhattanDist
+                        + " + penalty=" + MANHATTAN_OBSTACLE_PENALTY + " + margin=" + safetyMargin + ". Fuel=" + this.getFuelLevel());
+            }
+            return shouldRefuel;
+        }
+
+        // Path exists; count actual steps
+        int pathLength = countPathSteps(path);
+        boolean shouldRefuel = this.getFuelLevel() <= pathLength + safetyMargin;
+
+        if (shouldRefuel) {
+            System.out.println(this.getName() + " [RefuelV2] A* pathLength=" + pathLength
+                    + " + margin=" + safetyMargin + ". Fuel=" + this.getFuelLevel());
+        }
+
+        return shouldRefuel;
+    }
+
+    private int countPathSteps(TWPath path) {
+        int count = 0;
+        while (path.hasNext()) {
+            path.popNext();
+            count++;
+        }
+        return count;
+    }
+
+    private TWDirection nextStepAlongPath() {
+        TWPath path = pathGenerator.findPath(this.getX(), this.getY(), fuelStationX, fuelStationY);
+
+        if (path != null && path.hasNext()) {
+            TWPathStep step = path.popNext();
+            if (step.getDirection() != TWDirection.Z) {
+                return step.getDirection();
+            }
+        }
+
+        // Fallback to greedy if no valid path
+        return nextStepTowardFuel();
     }
 
     private TWDirection nextStepTowardFuel() {

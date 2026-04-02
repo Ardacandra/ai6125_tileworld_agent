@@ -1,5 +1,7 @@
 package tileworld.agent;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import tileworld.environment.TWDirection;
 import tileworld.environment.TWEnvironment;
@@ -15,10 +17,20 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
     private static final int MANHATTAN_OBSTACLE_PENALTY = 10;
     private static final double SAFETY_MARGIN_RATIO = 0.20; // Adjust this to tune refuel behavior
     private static final double MIN_FUEL_PERCENTAGE = 0.20; // Minimum fuel threshold as safety floor
+    private static final double MIN_MEMORY_TARGET_AGE = 8.0;
+    private static final double MAX_MEMORY_TARGET_AGE = 80.0;
+    private static final double MISSING_TARGET_BLACKLIST_STEPS = 15.0;
 
     private final AstarPathGenerator pathGenerator;
     private final ArdaCustomTWAgentMemory customMemory;
     private final int safetyMargin;
+    private String pendingTargetType = "";
+    private int pendingTargetX = -1;
+    private int pendingTargetY = -1;
+    private int resolvedMemoryTargets = 0;
+    private int missedMemoryTargets = 0;
+    private double localStep = 0.0;
+    private final Map<String, Double> blacklistedTargets = new HashMap<>();
 
     public ArdaTWAgent_v2(String name, int xpos, int ypos, TWEnvironment env, double fuelLevel) {
         super(name, xpos, ypos, env, fuelLevel);
@@ -43,23 +55,30 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
 
     @Override
     protected TWThought customThink() {
+        localStep++;
+
+        TWTile tileHere = getTileAtCurrentPosition();
+        TWHole holeHere = getHoleAtCurrentPosition();
+        resolvePendingTargetIfReached(tileHere, holeHere);
+
         if (fuelStationX >= 0 && fuelStationY >= 0 && shouldRefuel()) {
             setIntention(ENTITY_FUEL, fuelStationX, fuelStationY);
+            rememberPendingTarget(ENTITY_FUEL, fuelStationX, fuelStationY);
             if (this.getX() == fuelStationX && this.getY() == fuelStationY) {
                 return new TWThought(TWAction.REFUEL, TWDirection.Z);
             }
             return new TWThought(TWAction.MOVE, nextStepAlongPath());
         }
 
-        TWTile tileHere = getTileAtCurrentPosition();
         if (tileHere != null && carriedTiles.size() < CARRY_CAPACITY) {
             setIntention(ENTITY_TILE, this.getX(), this.getY());
+            rememberPendingTarget(ENTITY_TILE, this.getX(), this.getY());
             return new TWThought(TWAction.PICKUP, TWDirection.Z);
         }
 
-        TWHole holeHere = getHoleAtCurrentPosition();
         if (holeHere != null && hasTile()) {
             setIntention(ENTITY_HOLE, this.getX(), this.getY());
+            rememberPendingTarget(ENTITY_HOLE, this.getX(), this.getY());
             return new TWThought(TWAction.PUTDOWN, TWDirection.Z);
         }
 
@@ -70,20 +89,24 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
 
         if (hasTile() && closestHole != null && holeDistance < tileDistance) {
             setIntention(ENTITY_HOLE, closestHole[0], closestHole[1]);
+            rememberPendingTarget(ENTITY_HOLE, closestHole[0], closestHole[1]);
             return new TWThought(TWAction.MOVE, nextStepTowardTarget(closestHole[0], closestHole[1]));
         }
 
         if (carriedTiles.size() < CARRY_CAPACITY && closestTile != null && tileDistance <= holeDistance) {
             setIntention(ENTITY_TILE, closestTile[0], closestTile[1]);
+            rememberPendingTarget(ENTITY_TILE, closestTile[0], closestTile[1]);
             return new TWThought(TWAction.MOVE, nextStepTowardTarget(closestTile[0], closestTile[1]));
         }
 
         if (hasTile() && closestHole != null) {
             setIntention(ENTITY_HOLE, closestHole[0], closestHole[1]);
+            rememberPendingTarget(ENTITY_HOLE, closestHole[0], closestHole[1]);
             return new TWThought(TWAction.MOVE, nextStepTowardTarget(closestHole[0], closestHole[1]));
         }
 
         clearIntention();
+        clearPendingTarget();
         return new TWThought(TWAction.MOVE, getRandomDirection());
     }
 
@@ -246,7 +269,8 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
 
         TWTile observed = (TWTile) this.getMemory().getClosestObjectInSensorRange(TWTile.class);
         if (observed != null) {
-            if (!isClaimedByCloserAgent(ENTITY_TILE, observed.getX(), observed.getY())) {
+            if (!isBlacklisted(ENTITY_TILE, observed.getX(), observed.getY())
+                    && !isClaimedByCloserAgent(ENTITY_TILE, observed.getX(), observed.getY())) {
                 // Observed tiles get max priority (freshly in sensor range)
                 bestUtility = Double.MAX_VALUE;
                 best = new int[] { observed.getX(), observed.getY() };
@@ -255,6 +279,12 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
 
         // Prefer memory entries by utility (freshness / distance), not just distance
         for (ArdaCustomTWAgentMemory.MemoryEntry entry : customMemory.getKnownTiles()) {
+            if (!isMemoryEntryFresh(entry)) {
+                continue;
+            }
+            if (isBlacklisted(ENTITY_TILE, entry.x, entry.y)) {
+                continue;
+            }
             if (isClaimedByCloserAgent(ENTITY_TILE, entry.x, entry.y)) {
                 continue;
             }
@@ -265,6 +295,9 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
         }
 
         for (int[] shared : getSharedTileLocations()) {
+            if (isBlacklisted(ENTITY_TILE, shared[0], shared[1])) {
+                continue;
+            }
             if (isClaimedByCloserAgent(ENTITY_TILE, shared[0], shared[1])) {
                 continue;
             }
@@ -285,7 +318,8 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
 
         TWHole observed = (TWHole) this.getMemory().getClosestObjectInSensorRange(TWHole.class);
         if (observed != null) {
-            if (!isClaimedByCloserAgent(ENTITY_HOLE, observed.getX(), observed.getY())) {
+            if (!isBlacklisted(ENTITY_HOLE, observed.getX(), observed.getY())
+                    && !isClaimedByCloserAgent(ENTITY_HOLE, observed.getX(), observed.getY())) {
                 // Observed holes get max priority (freshly in sensor range)
                 bestUtility = Double.MAX_VALUE;
                 best = new int[] { observed.getX(), observed.getY() };
@@ -294,6 +328,12 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
 
         // Prefer memory entries by utility (freshness / distance), not just distance
         for (ArdaCustomTWAgentMemory.MemoryEntry entry : customMemory.getKnownHoles()) {
+            if (!isMemoryEntryFresh(entry)) {
+                continue;
+            }
+            if (isBlacklisted(ENTITY_HOLE, entry.x, entry.y)) {
+                continue;
+            }
             if (isClaimedByCloserAgent(ENTITY_HOLE, entry.x, entry.y)) {
                 continue;
             }
@@ -304,6 +344,9 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
         }
 
         for (int[] shared : getSharedHoleLocations()) {
+            if (isBlacklisted(ENTITY_HOLE, shared[0], shared[1])) {
+                continue;
+            }
             if (isClaimedByCloserAgent(ENTITY_HOLE, shared[0], shared[1])) {
                 continue;
             }
@@ -320,6 +363,88 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
 
     private int manhattanDistanceTo(int targetX, int targetY) {
         return Math.abs(targetX - this.getX()) + Math.abs(targetY - this.getY());
+    }
+
+    private void rememberPendingTarget(String targetType, int targetX, int targetY) {
+        pendingTargetType = targetType;
+        pendingTargetX = targetX;
+        pendingTargetY = targetY;
+    }
+
+    private void clearPendingTarget() {
+        pendingTargetType = "";
+        pendingTargetX = -1;
+        pendingTargetY = -1;
+    }
+
+    private void resolvePendingTargetIfReached(TWTile tileHere, TWHole holeHere) {
+        if ("".equals(pendingTargetType)) {
+            return;
+        }
+        if (this.getX() != pendingTargetX || this.getY() != pendingTargetY) {
+            return;
+        }
+
+        if (ENTITY_TILE.equals(pendingTargetType)) {
+            resolvedMemoryTargets++;
+            if (tileHere == null) {
+                missedMemoryTargets++;
+                customMemory.removeTile(pendingTargetX, pendingTargetY);
+                forgetSharedTile(pendingTargetX, pendingTargetY);
+                addToBlacklist(ENTITY_TILE, pendingTargetX, pendingTargetY);
+            }
+        } else if (ENTITY_HOLE.equals(pendingTargetType)) {
+            resolvedMemoryTargets++;
+            if (holeHere == null) {
+                missedMemoryTargets++;
+                customMemory.removeHole(pendingTargetX, pendingTargetY);
+                forgetSharedHole(pendingTargetX, pendingTargetY);
+                addToBlacklist(ENTITY_HOLE, pendingTargetX, pendingTargetY);
+            }
+        }
+
+        clearPendingTarget();
+    }
+
+    private boolean isMemoryEntryFresh(ArdaCustomTWAgentMemory.MemoryEntry entry) {
+        double age = localStep - entry.observedAt;
+        return age <= getAdaptiveMemoryAgeLimit();
+    }
+
+    private double getAdaptiveMemoryAgeLimit() {
+        if (resolvedMemoryTargets <= 0) {
+            return MAX_MEMORY_TARGET_AGE;
+        }
+
+        double missRate = missedMemoryTargets / (double) resolvedMemoryTargets;
+        if (missRate < 0.0) {
+            missRate = 0.0;
+        } else if (missRate > 1.0) {
+            missRate = 1.0;
+        }
+
+        return MAX_MEMORY_TARGET_AGE - (MAX_MEMORY_TARGET_AGE - MIN_MEMORY_TARGET_AGE) * missRate;
+    }
+
+    private void addToBlacklist(String targetType, int targetX, int targetY) {
+        blacklistedTargets.put(blacklistKey(targetType, targetX, targetY), localStep + MISSING_TARGET_BLACKLIST_STEPS);
+    }
+
+    private boolean isBlacklisted(String targetType, int targetX, int targetY) {
+        String key = blacklistKey(targetType, targetX, targetY);
+        Double expiresAt = blacklistedTargets.get(key);
+        if (expiresAt == null) {
+            return false;
+        }
+        if (expiresAt <= localStep) {
+            blacklistedTargets.remove(key);
+            return false;
+        }
+        return true;
+    }
+
+    private String blacklistKey(String targetType, int targetX, int targetY) {
+        return targetType + ":" + targetX + ":" + targetY;
     }
 
     private boolean canMove(TWDirection direction) {

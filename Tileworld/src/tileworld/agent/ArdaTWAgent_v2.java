@@ -20,6 +20,8 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
     private static final double MIN_MEMORY_TARGET_AGE = 8.0;
     private static final double MAX_MEMORY_TARGET_AGE = 80.0;
     private static final double MISSING_TARGET_BLACKLIST_STEPS = 15.0;
+    private static final double DELIVERY_CHURN_THRESHOLD = 0.25;
+    private static final int LOW_CHURN_HOLE_ADVANTAGE = 2;
 
     private final AstarPathGenerator pathGenerator;
     private final ArdaCustomTWAgentMemory customMemory;
@@ -84,16 +86,25 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
 
         int[] closestTile = getClosestTileTarget();
         int[] closestHole = getClosestHoleTarget();
-        int tileDistance = (closestTile == null) ? Integer.MAX_VALUE : manhattanDistanceTo(closestTile[0], closestTile[1]);
-        int holeDistance = (closestHole == null) ? Integer.MAX_VALUE : manhattanDistanceTo(closestHole[0], closestHole[1]);
 
-        if (hasTile() && closestHole != null && holeDistance < tileDistance) {
+        if (!hasTile()) {
+            if (closestTile != null) {
+                setIntention(ENTITY_TILE, closestTile[0], closestTile[1]);
+                rememberPendingTarget(ENTITY_TILE, closestTile[0], closestTile[1]);
+                return new TWThought(TWAction.MOVE, nextStepTowardTarget(closestTile[0], closestTile[1]));
+            }
+            clearIntention();
+            clearPendingTarget();
+            return new TWThought(TWAction.MOVE, getRandomDirection());
+        }
+
+        if (shouldDeliverNow(closestTile, closestHole)) {
             setIntention(ENTITY_HOLE, closestHole[0], closestHole[1]);
             rememberPendingTarget(ENTITY_HOLE, closestHole[0], closestHole[1]);
             return new TWThought(TWAction.MOVE, nextStepTowardTarget(closestHole[0], closestHole[1]));
         }
 
-        if (carriedTiles.size() < CARRY_CAPACITY && closestTile != null && tileDistance <= holeDistance) {
+        if (carriedTiles.size() < CARRY_CAPACITY && closestTile != null) {
             setIntention(ENTITY_TILE, closestTile[0], closestTile[1]);
             rememberPendingTarget(ENTITY_TILE, closestTile[0], closestTile[1]);
             return new TWThought(TWAction.MOVE, nextStepTowardTarget(closestTile[0], closestTile[1]));
@@ -365,6 +376,56 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
         return Math.abs(targetX - this.getX()) + Math.abs(targetY - this.getY());
     }
 
+    private boolean shouldDeliverNow(int[] closestTile, int[] closestHole) {
+        if (!hasTile() || closestHole == null) {
+            return false;
+        }
+
+        // Always deliver when inventory is full, or when no tile target exists.
+        if (carriedTiles.size() >= CARRY_CAPACITY || closestTile == null) {
+            return true;
+        }
+
+        int tileDistance = manhattanDistanceTo(closestTile[0], closestTile[1]);
+        int holeDistance = manhattanDistanceTo(closestHole[0], closestHole[1]);
+        double missRate = getObservedMissRate();
+
+        // Low churn: preserve Config 1 behavior by favoring batching/collection.
+        if (missRate < DELIVERY_CHURN_THRESHOLD) {
+            if (carriedTiles.size() <= 1) {
+                return false;
+            }
+            return holeDistance + LOW_CHURN_HOLE_ADVANTAGE < tileDistance;
+        }
+
+        double holeUrgency = targetUrgencyScore(closestHole[0], closestHole[1]);
+        double tileUrgency = targetUrgencyScore(closestTile[0], closestTile[1]);
+
+        // More carried tiles and higher miss-rate (high churn) should bias toward delivery-first.
+        double carryBias = 1.0 + 0.20 * carriedTiles.size();
+        double churnBias = 1.0 + missRate;
+
+        return holeUrgency * carryBias * churnBias >= tileUrgency;
+    }
+
+    private double targetUrgencyScore(int targetX, int targetY) {
+        return 1.0 / (manhattanDistanceTo(targetX, targetY) + 1.0);
+    }
+
+    private double getObservedMissRate() {
+        if (resolvedMemoryTargets <= 0) {
+            return 0.0;
+        }
+        double missRate = missedMemoryTargets / (double) resolvedMemoryTargets;
+        if (missRate < 0.0) {
+            return 0.0;
+        }
+        if (missRate > 1.0) {
+            return 1.0;
+        }
+        return missRate;
+    }
+
     private void rememberPendingTarget(String targetType, int targetX, int targetY) {
         pendingTargetType = targetType;
         pendingTargetX = targetX;
@@ -416,12 +477,7 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
             return MAX_MEMORY_TARGET_AGE;
         }
 
-        double missRate = missedMemoryTargets / (double) resolvedMemoryTargets;
-        if (missRate < 0.0) {
-            missRate = 0.0;
-        } else if (missRate > 1.0) {
-            missRate = 1.0;
-        }
+        double missRate = getObservedMissRate();
 
         return MAX_MEMORY_TARGET_AGE - (MAX_MEMORY_TARGET_AGE - MIN_MEMORY_TARGET_AGE) * missRate;
     }

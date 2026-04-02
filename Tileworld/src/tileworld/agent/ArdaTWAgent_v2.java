@@ -171,10 +171,12 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
     private TWDirection nextStepAlongPath() {
         TWPath path = pathGenerator.findPath(this.getX(), this.getY(), fuelStationX, fuelStationY);
 
-        if (path != null && path.hasNext()) {
-            TWPathStep step = path.popNext();
-            if (step.getDirection() != TWDirection.Z) {
-                return step.getDirection();
+        if (path != null) {
+            while (path.hasNext()) {
+                TWPathStep step = path.popNext();
+                if (step.getDirection() != TWDirection.Z) {
+                    return step.getDirection();
+                }
             }
         }
 
@@ -185,10 +187,12 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
     private TWDirection nextStepTowardTarget(int targetX, int targetY) {
         TWPath path = pathGenerator.findPath(this.getX(), this.getY(), targetX, targetY);
 
-        if (path != null && path.hasNext()) {
-            TWPathStep step = path.popNext();
-            if (step.getDirection() != TWDirection.Z) {
-                return step.getDirection();
+        if (path != null) {
+            while (path.hasNext()) {
+                TWPathStep step = path.popNext();
+                if (step.getDirection() != TWDirection.Z) {
+                    return step.getDirection();
+                }
             }
         }
 
@@ -237,25 +241,25 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
     }
 
     private int[] getClosestTileTarget() {
-        int bestDistance = Integer.MAX_VALUE;
+        double bestUtility = -1.0;
         int[] best = null;
 
         TWTile observed = (TWTile) this.getMemory().getClosestObjectInSensorRange(TWTile.class);
         if (observed != null) {
-            int observedDistance = manhattanDistanceTo(observed.getX(), observed.getY());
             if (!isClaimedByCloserAgent(ENTITY_TILE, observed.getX(), observed.getY())) {
-                bestDistance = observedDistance;
+                // Observed tiles get max priority (freshly in sensor range)
+                bestUtility = Double.MAX_VALUE;
                 best = new int[] { observed.getX(), observed.getY() };
             }
         }
 
+        // Prefer memory entries by utility (freshness / distance), not just distance
         for (ArdaCustomTWAgentMemory.MemoryEntry entry : customMemory.getKnownTiles()) {
             if (isClaimedByCloserAgent(ENTITY_TILE, entry.x, entry.y)) {
                 continue;
             }
-            int d = manhattanDistanceTo(entry.x, entry.y);
-            if (d < bestDistance) {
-                bestDistance = d;
+            if (entry.utility > bestUtility) {
+                bestUtility = entry.utility;
                 best = new int[] { entry.x, entry.y };
             }
         }
@@ -264,9 +268,10 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
             if (isClaimedByCloserAgent(ENTITY_TILE, shared[0], shared[1])) {
                 continue;
             }
-            int d = manhattanDistanceTo(shared[0], shared[1]);
-            if (d < bestDistance) {
-                bestDistance = d;
+            // For shared targets, use utility weight similar to memory entries
+            double sharedUtility = 1.0 / (manhattanDistanceTo(shared[0], shared[1]) + 1.0);
+            if (sharedUtility > bestUtility) {
+                bestUtility = sharedUtility;
                 best = new int[] { shared[0], shared[1] };
             }
         }
@@ -275,25 +280,25 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
     }
 
     private int[] getClosestHoleTarget() {
-        int bestDistance = Integer.MAX_VALUE;
+        double bestUtility = -1.0;
         int[] best = null;
 
         TWHole observed = (TWHole) this.getMemory().getClosestObjectInSensorRange(TWHole.class);
         if (observed != null) {
-            int observedDistance = manhattanDistanceTo(observed.getX(), observed.getY());
             if (!isClaimedByCloserAgent(ENTITY_HOLE, observed.getX(), observed.getY())) {
-                bestDistance = observedDistance;
+                // Observed holes get max priority (freshly in sensor range)
+                bestUtility = Double.MAX_VALUE;
                 best = new int[] { observed.getX(), observed.getY() };
             }
         }
 
+        // Prefer memory entries by utility (freshness / distance), not just distance
         for (ArdaCustomTWAgentMemory.MemoryEntry entry : customMemory.getKnownHoles()) {
             if (isClaimedByCloserAgent(ENTITY_HOLE, entry.x, entry.y)) {
                 continue;
             }
-            int d = manhattanDistanceTo(entry.x, entry.y);
-            if (d < bestDistance) {
-                bestDistance = d;
+            if (entry.utility > bestUtility) {
+                bestUtility = entry.utility;
                 best = new int[] { entry.x, entry.y };
             }
         }
@@ -302,9 +307,10 @@ public class ArdaTWAgent_v2 extends TWAgentSkeleton {
             if (isClaimedByCloserAgent(ENTITY_HOLE, shared[0], shared[1])) {
                 continue;
             }
-            int d = manhattanDistanceTo(shared[0], shared[1]);
-            if (d < bestDistance) {
-                bestDistance = d;
+            // For shared targets, use utility weight similar to memory entries
+            double sharedUtility = 1.0 / (manhattanDistanceTo(shared[0], shared[1]) + 1.0);
+            if (sharedUtility > bestUtility) {
+                bestUtility = sharedUtility;
                 best = new int[] { shared[0], shared[1] };
             }
         }

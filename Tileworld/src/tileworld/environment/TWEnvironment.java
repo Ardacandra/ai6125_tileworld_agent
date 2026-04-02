@@ -34,11 +34,11 @@ import tileworld.agent.TWAgent;
 public class TWEnvironment extends SimState implements Steppable {
 
     private static final String[] DEFAULT_AGENT_CLASSES = {
-            "tileworld.agent.ArdaTWAgent_v1",
-            "tileworld.agent.AmeyaGreedyBFSAgentWithMemory",
+            "tileworld.agent.ArdaTWAgent_v2",
+            "tileworld.agent.AmeyaGreedyBFSAgentWithMemoryMessageSkeleton",
             "tileworld.agent.EricaMyTWAgent",
             "tileworld.agent.HarshdeepPerimeterAgent",
-            "tileworld.agent.BalalaZonePatrolAgent",
+            "tileworld.agent.BalalaZonePatrolAgentPartner",
             "tileworld.agent.BenTWAgent"
     };
 

@@ -72,6 +72,7 @@ public class BenTWPlanner_v2 implements TWPlanner {
     	}
     	if (isAtNearGoal()) { //reached near goal
     		nearGoal = null;
+    		cleanupMemoryAtGoal();
     		agent.debugPrint("REACHED NEAR GOAL");
     	}
     	if (isInvalidCell(expGoal)) { //invalid exp goal
@@ -124,6 +125,19 @@ public class BenTWPlanner_v2 implements TWPlanner {
     	return nearGoal;
     }
     
+    public void cleanupMemoryAtGoal() {
+    	int xPos = agent.getX();
+    	int yPos = agent.getY();
+    	Object memobj = agent.getMemory().getMemoryGrid().get(xPos, yPos);
+    	Object envobj = agent.getEnvironment().getObjectGrid().get(xPos, yPos);
+    	if (memobj != null && envobj != null) {
+    		if (memobj.getClass() == envobj.getClass()) {
+    			return;
+    		}
+    	}
+    	if (memobj != null) agent.getMemory().removeObject((TWEntity) memobj);
+    }
+    
     private Int2D generateExpGoal() {
         Int2D best = null;
         int bestScore = Integer.MIN_VALUE;
@@ -135,6 +149,7 @@ public class BenTWPlanner_v2 implements TWPlanner {
 
         for (int x = 1; x <= width - 1; x++) {
             for (int y = 1; y <= height - 1; y++) {
+            	if (x == agent.getX() && y == agent.getY()) continue;
             	//skip blocked cells
                 if (agent.getMemory().isCellBlocked(x, y)) continue;
                 if (isCellBlacklisted(x, y)) continue;
@@ -173,13 +188,17 @@ public class BenTWPlanner_v2 implements TWPlanner {
     	//loop sensor range and assign score to unknown cells
     	for (int x = xPos - rng; x < xPos + rng; x++) {
             for (int y = yPos - rng; y < yPos + rng; y++) {
-            	if (!agent.getEnvironment().isInBounds(x, y)) continue;
-                if (agent.getMemory().isCellBlocked(x, y)) continue;
-                if (isCellBlacklisted(x, y)) continue;
+            	if (x == xPos && y == yPos) continue; //skip current cell as it's not a goal
+            	if (!agent.getEnvironment().isInBounds(x, y)) continue; //out of bounds
+                if (agent.getMemory().isCellBlocked(x, y)) continue; //blocked cell
+                if (isCellBlacklisted(x, y)) continue; //blacklisted
                 
                 int dist = manhattanDist(x, y, xPos, yPos);
                 
             	Object obj = agent.getMemory().getMemoryGrid().get(x, y);
+        		Object envobj = agent.getEnvironment().getObjectGrid().get(x, y);
+        		if (envobj == null) continue; //invalid object when comparing with environment in sensor range
+            	
             	if (obj instanceof TWHole && agent.hasTiles()) {
             		if (dist < bestHoleScore) {
                     	hole_entities = new ArrayList<Int2D>();
@@ -230,7 +249,7 @@ public class BenTWPlanner_v2 implements TWPlanner {
     private int cellExpScore(int x, int y) {
         if (!agent.getEnvironment().isInBounds(x, y)) return 0; //out of bounds
         if (agent.getMemory().isCellBlocked(x, y)) return 0; //cell blocked
-        if (agent.getMemory().getMemoryGrid().get(x, y) != null) return 0; //in-memory already
+        if (agent.getCustomMemory().hasVisited(x, y)) return 0; //in-memory already
         return 1; //not in-memory (fresh area, new or decayed)
     }
     
@@ -258,6 +277,7 @@ public class BenTWPlanner_v2 implements TWPlanner {
     		}
     		//curPlan == null, blacklist goal spot, unreachable
     		blacklistCells.add(nearGoal);
+    		agent.debugPrint("ADD BLACKLIST NEAR GOAL:" + nearGoal.x + "," + nearGoal.y);
     		nearGoal = null;
     	}
     	//invalid nearGoal, valid expGoal
@@ -269,6 +289,7 @@ public class BenTWPlanner_v2 implements TWPlanner {
 		}
     	//invalid expGoal
     	blacklistCells.add(expGoal);
+		agent.debugPrint("ADD BLACKLIST FAR GOAL:" + expGoal.x + "," + expGoal.y);
     	expGoal = null;
         return curPlan;
     }
@@ -309,6 +330,10 @@ public class BenTWPlanner_v2 implements TWPlanner {
     		}
     	}
     	return TWDirection.Z;
+    }
+    
+    public int blacklistCount() {
+    	return blacklistCells.size();
     }
 
 	@Override

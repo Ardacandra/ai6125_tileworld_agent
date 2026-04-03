@@ -13,12 +13,12 @@ public class BenTWAgent_v2 extends TWAgentSkeleton {
 	
 	private boolean DEBUG_LOGGING = false;
 	
-	private TWAgentWorkingMemory memory;
+	private BenTWAgentWorkingMemory_v2 customMemory;
 	private BenTWPlanner_v2 planner;
 	
 	public BenTWAgent_v2(String name, int xpos, int ypos, TWEnvironment env, double fuelLevel) {
         super(name, xpos, ypos, env, fuelLevel);
-        this.memory = new TWAgentWorkingMemory(this, env.schedule, env.getxDimension(), env.getyDimension());
+        this.customMemory = new BenTWAgentWorkingMemory_v2(this, env.schedule, env.getxDimension(), env.getyDimension());
         this.planner = new BenTWPlanner_v2(this);
     }
 	
@@ -120,7 +120,7 @@ public class BenTWAgent_v2 extends TWAgentSkeleton {
     
     // Am I too low? ignore other tasks and get straight to the fuel station
     public boolean criticalFuel() {
-    	return this.getFuelLevel() < (int) getEnvironment().getxDimension() * 2.25;
+    	return this.getFuelLevel() < (int) getEnvironment().getxDimension() * 2.1;
     }
     
     private boolean knowsFuelStation() {
@@ -153,5 +153,9 @@ public class BenTWAgent_v2 extends TWAgentSkeleton {
 				+ " POS: " + this.getX() + "," + this.getY()
 				+ " " + msg);
     	}
+    }
+    
+    public BenTWAgentWorkingMemory_v2 getCustomMemory() {
+    	return customMemory;
     }
 }

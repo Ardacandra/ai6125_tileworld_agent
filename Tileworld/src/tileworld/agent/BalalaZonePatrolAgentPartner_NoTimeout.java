@@ -67,12 +67,12 @@ import tileworld.planners.TWPath;
  * - Does NOT modify the environment package
  * - Fuel station found only within sensor range (spec compliant)
  */
-public class BalalaZonePatrolAgentPartner extends TWAgentSkeleton {
+public class BalalaZonePatrolAgentPartner_NoTimeout extends TWAgentSkeleton {
 
     // ---------------------------------------------------------------
     // Constants
     // ---------------------------------------------------------------
-    private static final int    PHASE1_TIMEOUT     = 30;
+    
     private static final double EMERGENCY_BUFFER   = 30.0;
     private static final double EMERGENCY_UNKNOWN  = 0.35;
     private static final double FUEL_SAFETY_EARLY  = 30.0;
@@ -97,7 +97,6 @@ public class BalalaZonePatrolAgentPartner extends TWAgentSkeleton {
     private final AstarPathGenerator  pathGenerator;
     private BalalaCustomTWAgentMemory customMemory;
 
-    private boolean phase1Done = false;
 
     /**
      * Teammate carry-state snapshots from "pos" ArdaMessage broadcasts.
@@ -114,7 +113,7 @@ public class BalalaZonePatrolAgentPartner extends TWAgentSkeleton {
     // ---------------------------------------------------------------
     // Constructor
     // ---------------------------------------------------------------
-    public BalalaZonePatrolAgentPartner(String name, int xpos, int ypos,
+    public BalalaZonePatrolAgentPartner_NoTimeout(String name, int xpos, int ypos,
                                         TWEnvironment env, double fuelLevel) {
         super(name, xpos, ypos, env, fuelLevel);
 
@@ -179,7 +178,6 @@ public class BalalaZonePatrolAgentPartner extends TWAgentSkeleton {
             }
         }
 
-        checkPhase1Timeout();
 
         int    ax  = getX();
         int    ay  = getY();
@@ -294,19 +292,6 @@ public class BalalaZonePatrolAgentPartner extends TWAgentSkeleton {
         }
     }
 
-    // ---------------------------------------------------------------
-    // PHASE 1 TIMEOUT
-    // ---------------------------------------------------------------
-    private void checkPhase1Timeout() {
-        if (phase1Done) return;
-        if (phase1.isComplete()) { phase1Done = true; return; }
-        double now = getEnvironment().schedule.getTime();
-        if (now >= PHASE1_TIMEOUT) {
-            phase1Done = true;
-            System.out.println(agentName + " Phase1 TIMEOUT step "
-                    + (int) now + " → Phase 2");
-        }
-    }
 
     // ---------------------------------------------------------------
     // FUEL MANAGEMENT

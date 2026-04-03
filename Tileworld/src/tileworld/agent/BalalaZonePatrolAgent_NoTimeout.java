@@ -25,7 +25,6 @@ import tileworld.planners.TWPath;
  *
  * Constant derivations:
  *
- *   PHASE1_TIMEOUT = 200
  *     Config 1 wants ~150 (switch to full sweep sooner)
  *     Config 2 wants ~300 (but station found before timeout anyway)
  *     200 is safe for both — frees Phase 2 sooner in Config 1
@@ -51,7 +50,6 @@ import tileworld.planners.TWPath;
  * - Boustrophedon sweep per zone with sensor-range waypoints
  * - First agent to sense fuel station broadcasts via ArdaMessage
  * - All agents switch to Phase 2 the moment station is known
- * - Force-switches to Phase 2 after PHASE1_TIMEOUT steps
  *
  * ── PHASE 2 ───────────────────────────────────────────────────────
  * - Full map boustrophedon sweep, SWEEP_STEP jumps, starts at spawn
@@ -72,14 +70,13 @@ import tileworld.planners.TWPath;
  * - Does NOT modify the environment package
  * - Fuel station discovered only within sensor range (spec compliant)
  */
-public class BalalaZonePatrolAgent extends TWAgent {
+public class BalalaZonePatrolAgent_NoTimeout extends TWAgent {
 
     // ---------------------------------------------------------------
     // Tuned constants — balanced for Config 1, 2 and unknown Config 3
     // ---------------------------------------------------------------
 
     /** Steps before Phase 1 is force-abandoned. */
-    private static final int    PHASE1_TIMEOUT     = 30;
 
     /** Recency weight — slight increase from 0.25 helps Config 1. */
     private static final double W_RECENCY          = 0.40;
@@ -120,7 +117,6 @@ public class BalalaZonePatrolAgent extends TWAgent {
     private BalalaCustomTWAgentMemory      customMemory;
     private final Phase1Strategy     phase1;
 
-    private boolean phase1Done = false;
 
     private int fuelStationX = -1;
     private int fuelStationY = -1;
@@ -134,7 +130,7 @@ public class BalalaZonePatrolAgent extends TWAgent {
     // ---------------------------------------------------------------
     // Constructor
     // ---------------------------------------------------------------
-    public BalalaZonePatrolAgent(String name, int xpos, int ypos,
+    public BalalaZonePatrolAgent_NoTimeout(String name, int xpos, int ypos,
                            TWEnvironment env, double fuelLevel) {
         super(xpos, ypos, env, fuelLevel);
         this.name = name;
@@ -161,7 +157,7 @@ public class BalalaZonePatrolAgent extends TWAgent {
     @Override
     public void communicate() {
         phase1.communicate();
-        if (!phase1Done) return;
+        if (!phase1.isComplete()) return;
 
         getEnvironment().receiveMessage(
                 ArdaMessage.info(name, ENTITY_POS,
@@ -202,7 +198,6 @@ public class BalalaZonePatrolAgent extends TWAgent {
             fuelStationY = fs.y;
         }
 
-        checkPhase1Timeout();
 
         int ax = getX();
         int ay = getY();
@@ -222,11 +217,9 @@ public class BalalaZonePatrolAgent extends TWAgent {
         }
 
         // ── PHASE 1 ───────────────────────────────────────────────
-        if (!phase1Done) {
+        if (!phase1.isComplete()) {
             TWThought t = phase1.think();
             if (t != null) return t;
-            phase1Done = true;
-            System.out.println(name + " Phase 1 complete — switching to Phase 2");
         }
 
         // ── PHASE 2 ───────────────────────────────────────────────
@@ -235,17 +228,6 @@ public class BalalaZonePatrolAgent extends TWAgent {
 
     // ---------------------------------------------------------------
     // Phase 1 timeout
-    // ---------------------------------------------------------------
-    private void checkPhase1Timeout() {
-        if (phase1Done) return;
-        if (phase1.isComplete()) { phase1Done = true; return; }
-        double now = getEnvironment().schedule.getTime();
-        if (now >= PHASE1_TIMEOUT) {
-            phase1Done = true;
-            System.out.println(name + " Phase 1 TIMEOUT at step "
-                    + (int) now + " — switching to Phase 2");
-        }
-    }
 
     // ---------------------------------------------------------------
     // Phase 2 decision logic

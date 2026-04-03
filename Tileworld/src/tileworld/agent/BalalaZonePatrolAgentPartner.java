@@ -41,7 +41,7 @@ import tileworld.planners.TWPath;
  *
  * ── FUEL EMERGENCY ───────────────────────────────────────────────
  * Global check at top of customThink() before all other logic.
- * EMERGENCY_BUFFER = 30, EMERGENCY_UNKNOWN = 0.35.
+ * EMERGENCY_BUFFER = 45 (used to be 30), EMERGENCY_UNKNOWN = 0.35.
  *
  * ── SHARED MEMORY TARGETING ──────────────────────────────────────
  * In addition to personal memory (BalalaCustomTWAgentMemory), the
@@ -73,7 +73,7 @@ public class BalalaZonePatrolAgentPartner extends TWAgentSkeleton {
     // Constants
     // ---------------------------------------------------------------
     private static final int    PHASE1_TIMEOUT     = 30;
-    private static final double EMERGENCY_BUFFER   = 30.0;
+    private static final double EMERGENCY_BUFFER   = 45.0;
     private static final double EMERGENCY_UNKNOWN  = 0.35;
     private static final double FUEL_SAFETY_EARLY  = 30.0;
     private static final double FUEL_SAFETY_LATE   = 10.0;

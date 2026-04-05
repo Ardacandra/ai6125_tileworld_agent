@@ -8,7 +8,7 @@ import tileworld.planners.TWPath;
 import tileworld.exceptions.CellBlockedException;
 import java.util.*;
 
-public class MyTWAgent extends TWAgentSkeleton {
+public class EricaMyTWAgent extends TWAgentSkeleton {
 
     private static final double FUEL_THRESHOLD_RATIO = 0.28;
     private static final int CARRY_CAPACITY = 3;
@@ -21,7 +21,7 @@ public class MyTWAgent extends TWAgentSkeleton {
     private int cornerIdx = 0;
     private final boolean isLargeMap;
 
-    public MyTWAgent(String name, int x, int y, TWEnvironment env, double fuel) {
+    public EricaMyTWAgent(String name, int x, int y, TWEnvironment env, double fuel) {
         super(name, x, y, env, fuel);
         this.astar = new AstarPathGenerator(env, this, 2000); 
         this.isLargeMap = (env.getxDimension() >= 60 || env.getyDimension() >= 60);

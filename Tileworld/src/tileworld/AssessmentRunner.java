@@ -35,18 +35,30 @@ public class AssessmentRunner {
         final String name;
         final int x;
         final int y;
-        final double mu;
-        final double sigma;
+        final double tileMu;
+        final double tileSigma;
+        final double holeMu;
+        final double holeSigma;
+        final double obstacleMu;
+        final double obstacleSigma;
         final int lifeTime;
         final int fuel;
         final int agents;
 
-        Config(String name, int x, int y, double mu, double sigma, int lifeTime, int fuel, int agents) {
+        Config(String name, int x, int y,
+               double tileMu, double tileSigma,
+               double holeMu, double holeSigma,
+               double obstacleMu, double obstacleSigma,
+               int lifeTime, int fuel, int agents) {
             this.name = name;
             this.x = x;
             this.y = y;
-            this.mu = mu;
-            this.sigma = sigma;
+            this.tileMu = tileMu;
+            this.tileSigma = tileSigma;
+            this.holeMu = holeMu;
+            this.holeSigma = holeSigma;
+            this.obstacleMu = obstacleMu;
+            this.obstacleSigma = obstacleSigma;
             this.lifeTime = lifeTime;
             this.fuel = fuel;
             this.agents = agents;
@@ -89,21 +101,18 @@ public class AssessmentRunner {
     }
 
     public static void main(String[] args) {
-        Config config1 = new Config("Configuration 1", 50, 50, 0.2, 0.05, 100, 500, 6);
-        Config config2 = new Config("Configuration 2", 80, 80, 2.0, 0.5, 30, 500, 6);
-        // Config explorationConfig1 = new Config("Exploration Config 30x30", 30, 30, 0.2, 0.05, 100, 500, 6);
-        // Config explorationConfig2 = new Config("Exploration Config 100x100", 100, 100, 0.2, 0.05, 100, 500, 6);
-        // Config explorationConfig3 = new Config("Exploration Config 120x120", 120, 120, 0.2, 0.05, 100, 500, 6);
-        // Config explorationConfig4 = new Config("Exploration Config 150x150", 150, 150, 0.2, 0.05, 100, 500, 6);
-        // Config explorationConfig5 = new Config("Exploration Config 200x200", 200, 200, 0.2, 0.05, 100, 500, 6);
+        Config config = new Config(
+                "Config: Parameters.java",
+                Parameters.xDimension,
+                Parameters.yDimension,
+                Parameters.tileMean, Parameters.tileDev,
+                Parameters.holeMean, Parameters.holeDev,
+                Parameters.obstacleMean, Parameters.obstacleDev,
+                Parameters.lifeTime,
+                Parameters.defaultFuelLevel,
+                6);
 
-        runConfiguration(config1);
-        runConfiguration(config2);
-        // runConfiguration(explorationConfig1);
-        // runConfiguration(explorationConfig2);
-        // runConfiguration(explorationConfig3);
-        // runConfiguration(explorationConfig4);
-        // runConfiguration(explorationConfig5);
+        runConfiguration(config);
     }
 
     private static void runConfiguration(Config config) {
@@ -197,7 +206,10 @@ public class AssessmentRunner {
     private static RunSummary runSingleAssessment(int seed, Config config) {
         TWEnvironment env = new TWEnvironment(seed);
 
-        applyEnvironmentOverrides(env, config);
+        // Parameters.java values are used directly throughout TWEnvironment and
+        // TWObjectCreator (e.g. Parameters.lifeTime is hardcoded in TWObjectCreator.create()),
+        // so we no longer apply reflection overrides that would fight against them.
+        // applyEnvironmentOverrides(env, config);
 
         PrintStream originalOut = System.out;
         if (QUIET_AGENT_LOGS) {
@@ -237,7 +249,9 @@ public class AssessmentRunner {
                 }
                 steps = env.schedule.getSteps();
 
-                enforceConfiguredLifetime(env, config.lifeTime);
+                // TWObjectCreator.create() always assigns deathTime = time + Parameters.lifeTime,
+                // so enforcing a separate lifetime cap is no longer needed.
+                // enforceConfiguredLifetime(env, config.lifeTime);
 
                 for (TWAgent agent : agents) {
                     String name = agent.getName();
@@ -356,7 +370,9 @@ public class AssessmentRunner {
                 + ", Initial fuel: " + config.fuel
                 + ", Steps: " + STEPS
                 + ", Runs: " + RUNS_PER_CONFIG);
-        System.out.println("Object creation rate: N(mu=" + config.mu + ", sigma=" + config.sigma + ")");
+        System.out.println("Tile creation rate:     N(mu=" + config.tileMu + ", sigma=" + config.tileSigma + ")");
+        System.out.println("Hole creation rate:     N(mu=" + config.holeMu + ", sigma=" + config.holeSigma + ")");
+        System.out.println("Obstacle creation rate: N(mu=" + config.obstacleMu + ", sigma=" + config.obstacleSigma + ")");
         System.out.println("Object lifetime: " + config.lifeTime);
         System.out.println("Extra metrics: refuel count, max carried tiles, fuel consumed, idle ratio");
     }

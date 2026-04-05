@@ -12,7 +12,7 @@ import tileworld.planners.AstarPathGenerator;
 import tileworld.planners.TWPath;
 
 
-public class PerimeterAgent extends TWAgentSkeleton {
+public class HarshdeepPerimeterAgent extends TWAgentSkeleton {
 
     private static final double FUEL_THRESHOLD = 0.25;  // refuel when fuel < 25 % of max
     private static final double DETOUR_LIMIT   = 10.0;  // max Manhattan detour for opp. targets
@@ -43,7 +43,7 @@ public class PerimeterAgent extends TWAgentSkeleton {
     // CONSTRUCTOR
     // =========================================================================
 
-    public PerimeterAgent(String name, int x, int y, TWEnvironment env, double fuel) {
+    public HarshdeepPerimeterAgent(String name, int x, int y, TWEnvironment env, double fuel) {
         super(name, x, y, env, fuel); // skeleton sets agentName, phase1
         this.astar = new AstarPathGenerator(env, this, env.getxDimension() * env.getyDimension());
 
@@ -94,14 +94,14 @@ public class PerimeterAgent extends TWAgentSkeleton {
     /**
      * Recomputes the 4 patrol corners of the box around the fuel station.
      *
-     * The box is always 2R Ã— 2R (full perimeter = 8R).
+     * The box is always 2R Ãƒâ€” 2R (full perimeter = 8R).
      * When the fuel station is near a map edge or corner, the box is SHIFTED
      * inward instead of truncated  this places the fuel station at a corner
      * of the patrol box rather than shrinking the patrol area.
      *
      * Example  fuel station at map corner (0, 0), R=46:
      *   Centered start:  xMin=-46, xMax=46
-     *   Shift right +46: xMin=  0, xMax=92   â†� full 2R width preserved
+     *   Shift right +46: xMin=  0, xMax=92   Ã¢â€ ï¿½ full 2R width preserved
      *   Fuel station sits at corners[0] = (xMin, yMin)
      */
     private void recomputeAnchoredCorners() {
@@ -114,7 +114,7 @@ public class PerimeterAgent extends TWAgentSkeleton {
         int yMin = fuelStationY - anchoredR;
         int yMax = fuelStationY + anchoredR;
 
-        // Shift (not clamp) to keep the full 2RÃ—2R box inside map bounds.
+        // Shift (not clamp) to keep the full 2RÃƒâ€”2R box inside map bounds.
         // When the fuel station is near an edge, it ends up at a corner of the box.
         if (xMin < 0)       { xMax -= xMin;            xMin = 0; }
         if (xMax > mapMaxX) { xMin -= (xMax - mapMaxX); xMax = mapMaxX; }
@@ -170,14 +170,14 @@ public class PerimeterAgent extends TWAgentSkeleton {
         if (cornersThisCycle >= 4 && fuelAtReturn > surplusThreshold)
             smoothedRatio = Math.min(1.0, smoothedRatio * NUDGE_FACTOR);
 
-        // Derive R from smoothedRatio Ã— ceiling  always apply to anchoredRMax
+        // Derive R from smoothedRatio Ãƒâ€” ceiling  always apply to anchoredRMax
         int newR = Math.max(R_MIN, Math.min(anchoredRMax, (int)(anchoredRMax * smoothedRatio)));
 
         if (newR != anchoredR) {
             anchoredR = newR;
             recomputeAnchoredCorners();
             // Keep cornerIdx: continue patrol direction, no re-snap on R change
-            System.out.println(agentName + " [Phase2] R â†’ " + anchoredR
+            System.out.println(agentName + " [Phase2] R Ã¢â€ â€™ " + anchoredR
                 + "  corners=" + cornersThisCycle
                 + "  smoothedRatio=" + String.format("%.2f", smoothedRatio));
         }
@@ -192,25 +192,8 @@ public class PerimeterAgent extends TWAgentSkeleton {
 
     @Override
     protected void customCommunicate() {
-        // Skeleton already sent ArdaMessages for every visible tile/hole/fuel.
-        // We additionally write to SharedBlackboard so non-skeleton teammates
-        // (ZoneSweepAgent, BenTWAgent, etc.) can read the same data.
-        int    r    = Parameters.defaultSensorRange;
-        int    ax   = getX(), ay = getY();
-        double step = getEnvironment().schedule.getTime();
-
-        for (int dx = -r; dx <= r; dx++) {
-            for (int dy = -r; dy <= r; dy++) {
-                int cx = ax + dx, cy = ay + dy;
-                if (!getEnvironment().isValidLocation(cx, cy)) continue;
-                Object o = getEnvironment().getObjectGrid().get(cx, cy);
-                if      (o instanceof TWTile)        SharedBlackboard.putTile(cx, cy, step);
-                else if (o instanceof TWHole)        SharedBlackboard.putHole(cx, cy, step);
-                else if (o == null)                  { SharedBlackboard.removeTile(cx, cy);
-                                                       SharedBlackboard.removeHole(cx, cy); }
-                else if (o instanceof TWFuelStation) SharedBlackboard.setFuel(cx, cy);
-            }
-        }
+        // Skeleton's broadcastVisibleEntityInfo() already handles broadcasting
+        // all visible tiles/holes/fuel via ArdaMessages before this is called.
     }
 
     // =========================================================================
@@ -220,14 +203,8 @@ public class PerimeterAgent extends TWAgentSkeleton {
 
     @Override
     protected void handleTeamMessage(ArdaMessage msg) {
-        if (msg.getType() != ArdaMessage.MessageType.INFO) return;
-        double step = getEnvironment().schedule.getTime();
-        String et   = msg.getEntityType();
-        if      (ENTITY_TILE.equals(et))        SharedBlackboard.putTile(msg.getX(), msg.getY(), step);
-        else if (ENTITY_HOLE.equals(et))        SharedBlackboard.putHole(msg.getX(), msg.getY(), step);
-        else if (ENTITY_FUEL.equals(et))        SharedBlackboard.setFuel(msg.getX(), msg.getY());
-        else if (ENTITY_DELETE_TILE.equals(et)) SharedBlackboard.removeTile(msg.getX(), msg.getY());
-        else if (ENTITY_DELETE_HOLE.equals(et)) SharedBlackboard.removeHole(msg.getX(), msg.getY());
+        // Skeleton's ingestSharedInfo() already populates knownSharedTiles/knownSharedHoles
+        // from incoming ArdaMessages, which customThink() reads via getSharedHoleLocations().
     }
 
     // =========================================================================

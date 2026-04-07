@@ -29,6 +29,7 @@ public class BenTWPlanner_v2 implements TWPlanner {
 
 	private Int2D expGoal; //exploration
 	private Int2D nearGoal; //within sensory range
+	private Int2D lastExpGoal; //last exp goal, to prevent oscillation
 	private String goalType;
 	private TWPath curPlan; //current path generated based on goals
 
@@ -46,6 +47,7 @@ public class BenTWPlanner_v2 implements TWPlanner {
 				agent.getEnvironment().getxDimension() * agent.getEnvironment().getyDimension());
 		this.expGoal = null;
 		this.nearGoal = null;
+		this.lastExpGoal = null;
 		this.curPlan = null;
 		this.goalType = "";
 		blacklistCells = new ArrayList<Int2D>();
@@ -153,6 +155,8 @@ public class BenTWPlanner_v2 implements TWPlanner {
             	//skip blocked cells
                 if (agent.getMemory().isCellBlocked(x, y)) continue;
                 if (isCellBlacklisted(x, y)) continue;
+                //skip last exp goal to prevent oscillation
+                if (lastExpGoal != null && x == lastExpGoal.x && y == lastExpGoal.y) continue;
                 
                 int expScore = regionExpScore(x, y);
                 int dist = manhattanDist(agent.getX(), agent.getY(), x, y);
@@ -165,12 +169,15 @@ public class BenTWPlanner_v2 implements TWPlanner {
                     best = new Int2D(x, y);
                 }
                 if (score == bestScore) {
-                	entities.add(best);
+                	entities.add(new Int2D(x, y));
                 }
             }
         }
         Random random = new Random();
-        return entities.get(random.nextInt(entities.size()));
+        if (entities.isEmpty()) return best;
+        Int2D chosen = entities.get(random.nextInt(entities.size()));
+        lastExpGoal = chosen;
+        return chosen;
     }
     
     private Int2D generateNearGoal() {
@@ -312,6 +319,7 @@ public class BenTWPlanner_v2 implements TWPlanner {
         curPlan = null;
         expGoal = null;
         nearGoal = null;
+        lastExpGoal = null;
     }
     
     public TWDirection getMove() {
